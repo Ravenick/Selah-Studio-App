@@ -1,0 +1,1 @@
+- [Hymnal archive import quirks](hymnal-archive-import.md) — validate the official XML offline; its upstream endpoint and per-hymn rights need care.

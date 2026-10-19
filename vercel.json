@@ -1,0 +1,12 @@
+{
+  "buildCommand": "pnpm --filter @workspace/selah-studio run build",
+  "outputDirectory": "artifacts/selah-studio/dist/public",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

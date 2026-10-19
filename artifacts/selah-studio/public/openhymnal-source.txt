@@ -1,0 +1,7 @@
+Open Hymnal Project, Edition 2014.06
+Source: http://openhymnal.org/
+Copying terms: http://openhymnal.org/copying.html
+
+Selah Studio bundles this freely distributable source archive for offline search.
+The in-app public-hymn search only returns entries explicitly marked "copyright: public domain".
+Per-hymn credits and copyright statements remain in the source archive.

@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Selah Studio"
+description = "An offline-first church presentation studio for preparing lyrics and scripture slides, controlling a live congregation display, and presenting without a cloud database."
+version = "1.0.0"
+id = "artifacts/selah-studio"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22362
+
+[services.development]
+run = "pnpm --filter @workspace/selah-studio run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/selah-studio", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/selah-studio/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22362"
+BASE_PATH = "/"

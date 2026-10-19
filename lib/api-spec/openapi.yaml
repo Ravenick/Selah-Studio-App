@@ -1,0 +1,176 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: selah
+    description: Server-side providers used by Selah Studio
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /scripture:
+    get:
+      operationId: getScripture
+      tags: [selah]
+      summary: Fetch a Bible passage
+      description: Fetches a passage from API.Bible without exposing its key to the client.
+      parameters:
+        - name: bibleId
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: passageId
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        "200":
+          description: Passage text
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BiblePassage"
+        "400":
+          description: Invalid passage request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Passage not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: Scripture provider is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: API.Bible request failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /transcribe:
+    post:
+      operationId: transcribeAudio
+      tags: [selah]
+      summary: Transcribe a speech recording
+      description: Tries the configured Whisper models sequentially and returns the first successful transcript.
+      requestBody:
+        required: true
+        content:
+          audio/webm:
+            schema:
+              $ref: "#/components/schemas/TranscriptionAudio"
+          audio/ogg:
+            schema:
+              $ref: "#/components/schemas/TranscriptionAudio"
+          audio/mp4:
+            schema:
+              $ref: "#/components/schemas/TranscriptionAudio"
+          audio/wav:
+            schema:
+              $ref: "#/components/schemas/TranscriptionAudio"
+          application/octet-stream:
+            schema:
+              $ref: "#/components/schemas/TranscriptionAudio"
+      responses:
+        "200":
+          description: Speech transcription
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AudioTranscription"
+        "400":
+          description: Invalid audio request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "413":
+          description: Audio recording is too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: Speech transcription is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: All configured transcription models failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    BiblePassage:
+      type: object
+      properties:
+        id:
+          type: string
+        bibleId:
+          type: string
+        reference:
+          type: string
+        content:
+          type: string
+        verseCount:
+          type: integer
+        copyright:
+          type: ["string", "null"]
+      required: [id, bibleId, reference, content, verseCount, copyright]
+    TranscriptionAudio:
+      type: string
+      format: binary
+    AudioTranscription:
+      type: object
+      properties:
+        text:
+          type: string
+        model:
+          type: string
+      required: [text, model]
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+

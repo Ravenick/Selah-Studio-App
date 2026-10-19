@@ -1,0 +1,66 @@
+name: Selah Studio Windows build
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      VITE_API_BASE_URL: ${{ vars.SELAH_API_BASE_URL }}
+      WINDOWS_CERTIFICATE_B64: ${{ secrets.WINDOWS_CERTIFICATE_B64 }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install workspace packages
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Windows installers
+        run: pnpm --filter @workspace/selah-studio run build:desktop
+
+      - name: Sign Windows installers when certificate secrets are configured
+        if: ${{ env.WINDOWS_CERTIFICATE_B64 != '' && env.WINDOWS_CERTIFICATE_PASSWORD != '' }}
+        shell: pwsh
+        run: |
+          $certificatePath = Join-Path $env:RUNNER_TEMP "selah-studio-signing.pfx"
+          [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_B64))
+          $installers = Get-ChildItem "artifacts/selah-studio/src-tauri/target/release/bundle" -Recurse -Include *.exe,*.msi
+          foreach ($installer in $installers) {
+            & signtool.exe sign /f $certificatePath /p $env:WINDOWS_CERTIFICATE_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $installer.FullName
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          Remove-Item $certificatePath -Force
+
+      - name: Publish installers to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: selah-${{ github.run_number }}
+          name: Selah Studio build ${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          files: |
+            artifacts/selah-studio/src-tauri/target/release/bundle/nsis/*.exe
+            artifacts/selah-studio/src-tauri/target/release/bundle/msi/*.msi
