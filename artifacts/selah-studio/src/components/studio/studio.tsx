@@ -5,11 +5,13 @@ import {
   BookOpen,
   Check,
   CheckCheck,
+  ChevronLeft,
   ChevronRight,
   CircleHelp,
   Clock3,
   Cloud,
   Copy,
+  Edit2,
   ExternalLink,
   GripVertical,
   Image as ImageIcon,
@@ -157,11 +159,6 @@ function compileMappedScripture(book: string, chapter: string, verses: string[],
   });
 }
 
-function plausibleChapter(book: string, chapter: string) {
-  const canonical = resolveBook(book);
-  return Boolean(canonical && validChapter(canonical, chapter));
-}
-
 const bibleCodes: Record<string, string> = {
   Genesis: 'GEN', Exodus: 'EXO', Leviticus: 'LEV', Numbers: 'NUM', Deuteronomy: 'DEU',
   Joshua: 'JOS', Judges: 'JDG', Ruth: 'RUT', '1 Samuel': '1SA', '2 Samuel': '2SA',
@@ -194,15 +191,6 @@ const guideSteps = [
   { title: 'You’re ready to go live.', copy: 'Press Enter to project live. Use F1 (Blackout), F2 (Clear Text), or F3 (Logo) for instant control.', icon: Radio },
 ];
 
-const bibleBookPattern = Object.keys(bibleCodes)
-  .sort((a, b) => b.length - a.length)
-  .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'))
-  .join('|');
-const spokenReferencePattern = new RegExp(
-  `(?:^|\\b)(${bibleBookPattern})\\s+(\\d+)\\s*(?::|,|\\s)\\s*(\\d+(?:\\s*[-–—]\\s*\\d+)?)\\b`,
-  'i',
-);
-
 export function Studio() {
   const [builderOpen, setBuilderOpen] = useState(false);
   const [autoPush, setAutoPush] = useState(false);
@@ -224,7 +212,6 @@ export function Studio() {
   const [publicHymnSearch, setPublicHymnSearch] = useState(false);
   const [publicHymnResults, setPublicHymnResults] = useState<PublicHymn[]>([]);
   const [publicHymnStatus, setPublicHymnStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
-  const [publicHymnError, setPublicHymnError] = useState('');
 
   // Background Selection
   const [scriptureBackground, setScriptureBackground] = useState('scripture-obsidian');
@@ -240,8 +227,8 @@ export function Studio() {
   const [sequenceVerses, setSequenceVerses] = useState<SequenceVerseItem[]>([]);
   const [highlightedVerses, setHighlightedVerses] = useState<number[]>([1]);
 
-  // Panel-scoped keyboard focus
-  const [activeFocus, setActiveFocus] = useState<'preview' | 'live'>('preview');
+  // Exclusive Focus Partitioning: 'preview' | 'live' | 'deck'
+  const [activeFocus, setActiveFocus] = useState<'preview' | 'live' | 'deck'>('deck');
 
   // Spoken Bible Voice Feedback
   const [voiceFeedback, setVoiceFeedback] = useState<{
@@ -249,11 +236,14 @@ export function Studio() {
     parsed: ParsedSpokenReference | null;
   } | null>(null);
 
+  // Mid-service Fast Typo Editing
+  const [editingSlideIdx, setEditingSlideIdx] = useState<number | null>(null);
+  const [editingText, setEditingText] = useState('');
+
   const searchInput = useRef<HTMLInputElement>(null);
-  const previewButton = useRef<HTMLButtonElement>(null);
   const timelineSlides = useRef<Record<string, Slide[]>>({});
   const restoredCanvas = useRef<Slide[] | null>(null);
-  const mediaInput = useRef<HTMLInputElement>(null);
+  const deckCardsRef = useRef<(HTMLDivElement | null)[]>([]);
   const [librarySongs, setLibrarySongs] = useState(songs);
   const [bookFocused, setBookFocused] = useState(false);
   const [invalidField, setInvalidField] = useState('');
@@ -265,6 +255,9 @@ export function Studio() {
   const [slides, setSlides] = useState<Slide[]>(songSlides(defaultSong));
   const [selected, setSelected] = useState(0);
 
+  // Dedicated Media Presentation Deck states
+  const [mediaDeckSlides, setMediaDeckSlides] = useState<Slide[]>(songSlides(defaultSong));
+  const [selectedMediaDeckIdx, setSelectedMediaDeckIdx] = useState<number | null>(0);
   const [output, setOutput] = useState<OutputState>(() => {
     try {
       const cached = localStorage.getItem('selah-projector-latest');
@@ -280,23 +273,15 @@ export function Studio() {
   const [guide, setGuide] = useState(false);
   const [guideStep, setGuideStep] = useState(0);
   const [timeline, setTimeline] = useState(initialTimeline);
-  const [timelineActive, setTimelineActive] = useState('opening');
-  const [dragged, setDragged] = useState<string | null>(null);
   const [book, setBook] = useState('Psalms');
   const [chapter, setChapter] = useState('23');
   const [verse, setVerse] = useState('1');
-  const [checked, setChecked] = useState<number[]>([0]);
-  const [transcription, setTranscription] = useState('');
   const [notice, setNotice] = useState('');
-  const [countdown, setCountdown] = useState(15 * 60);
-  const [timerRunning, setTimerRunning] = useState(false);
   const [outputName, setOutputName] = useState('Main sanctuary');
   const channel = useRef<BroadcastChannel | null>(null);
   const outputRef = useRef(output);
   const chapterInput = useRef<HTMLInputElement>(null);
   const verseInput = useRef<HTMLInputElement>(null);
-  const voiceTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastVerse = useRef(0);
 
   const scriptureQuery = useGetScripture(
     lookupParams ?? { bibleId: DEFAULT_BIBLE_ID, passageId: 'GEN.1.1' },
@@ -315,14 +300,24 @@ export function Studio() {
   });
   const listening = voice.listening;
   const activeSlide = slides[selected] || slides[0] || welcomeSlide;
-  const availableChapter = validChapter(book, chapter);
-  const chapterVerses = getChapter(book, chapter);
   const bookMatches = matchingBooks(book);
 
   // Take slide live directly
   const broadcast = useCallback((slide: Slide) => {
     setOutput({ slide, mode: 'normal' });
   }, []);
+
+  // Sync active presentation deck card scroll into view smoothly
+  useEffect(() => {
+    const activeIdx = selectedMediaDeckIdx ?? selected;
+    if (activeIdx !== null && deckCardsRef.current[activeIdx]) {
+      deckCardsRef.current[activeIdx]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center',
+      });
+    }
+  }, [selectedMediaDeckIdx, selected]);
 
   // Sync output to BroadcastChannel & LocalStorage
   useEffect(() => {
@@ -346,11 +341,10 @@ export function Studio() {
     };
     return () => {
       bc.close();
-      if (voiceTimeout.current) clearTimeout(voiceTimeout.current);
     };
   }, []);
 
-  // Initialize workspace from local Dexie / preferences
+  // Initialize workspace from local storage & preferences
   useEffect(() => {
     let cancelled = false;
     Promise.all([readSavedSongs(), readTheme(), readWorkspacePreferences()])
@@ -368,7 +362,11 @@ export function Studio() {
         setThemeLoaded(true);
         setPreferencesLoaded(true);
         const savedSong = [...songs, ...saved].find((item) => item.title === restoredCanvas.current?.[0]?.title);
-        if (savedSong) setSong(savedSong);
+        if (savedSong) {
+          setSong(savedSong);
+          const generatedSlides = songSlides(savedSong);
+          setMediaDeckSlides(generatedSlides);
+        }
       })
       .catch(() => {
         if (!cancelled) {
@@ -417,155 +415,6 @@ export function Studio() {
   }, [autoPush, slides, selected, setStoreAuto, setStoreCanvas]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('selah-service-timeline', JSON.stringify(timeline));
-    } catch {
-      setSavedState('error');
-    }
-    try {
-      localStorage.setItem('selah-service-slides', JSON.stringify(timelineSlides.current));
-    } catch {
-      setSavedState('error');
-    }
-  }, [timeline]);
-
-  useEffect(() => {
-    if (!preferencesLoaded) return;
-    void saveWorkspacePreferences({ autoPush, scriptureBackground, scriptureBackgroundType, outputName }).catch(
-      () => setSavedState('error'),
-    );
-  }, [autoPush, scriptureBackground, scriptureBackgroundType, outputName, preferencesLoaded]);
-
-  useEffect(() => {
-    if (!themeLoaded) return;
-    setSavedState('saving');
-    void saveTheme(theme)
-      .then(() => setSavedState('saved'))
-      .catch(() => setSavedState('error'));
-  }, [theme, themeLoaded]);
-
-  // Online Scripture handling with automatic Offline KJV fallback
-  useEffect(() => {
-    if (!lookupParams) return;
-
-    if (scriptureQuery.data) {
-      const passage = scriptureQuery.data;
-      const parsed = parseBibleContent(passage.content);
-      const requestedIndexes = parseVerseRange(verse, Number.MAX_SAFE_INTEGER);
-      const requestedNumbers = requestedIndexes?.map((index) => index + 1) ?? [];
-      const selectedRows = parsed.verses
-        .map((text, index) => ({ text, number: parsed.verseNumbers[index] ?? index + 1 }))
-        .filter((row) => !requestedNumbers.length || requestedNumbers.includes(row.number));
-      const selectedVerses = selectedRows.map((row) => row.text);
-      const selectedNumbers = selectedRows.map((row) => row.number);
-
-      if (selectedVerses.length) {
-        const next = compileMappedScripture(book, chapter, selectedVerses, selectedNumbers).map((slide) => ({
-          ...slide,
-          background: scriptureBackground,
-          backgroundType: scriptureBackgroundType,
-        }));
-        setSlides(next);
-        setSelected(0);
-        loadPreview(next[0] ?? initialScripture);
-        setLookupError('');
-        void cachePassage({
-          bibleId: lookupParams.bibleId,
-          book,
-          chapter: Number(chapter),
-          reference: passage.reference,
-          verses: parsed.verses,
-          verseNumbers: parsed.verseNumbers,
-          copyright: passage.copyright,
-        }).catch(() => undefined);
-        setLookupParams(null);
-        return;
-      }
-    }
-
-    // Automatic Offline KJV Fallback when online fetch fails or produces no verses
-    if (scriptureQuery.error || (scriptureQuery.isFetched && !scriptureQuery.data)) {
-      const requestedIndexes = parseVerseRange(verse, 200) || [0];
-      const numbers = requestedIndexes.map((i) => i + 1);
-      void fetchOfflinePassage(book, Number(chapter), numbers).then((offlinePassage) => {
-        if (offlinePassage && offlinePassage.verses.length) {
-          const next = compileMappedScripture(book, chapter, offlinePassage.verses, offlinePassage.verseNumbers).map(
-            (slide) => ({
-              ...slide,
-              background: scriptureBackground,
-              backgroundType: scriptureBackgroundType,
-            }),
-          );
-          setSlides(next);
-          setSelected(0);
-          loadPreview(next[0] ?? initialScripture);
-          setLookupError('');
-          setNotice(`Using offline KJV for ${offlinePassage.reference}`);
-        } else {
-          setLookupError('Could not load passage from online service or offline KJV.');
-        }
-      });
-      setLookupParams(null);
-    }
-  }, [scriptureQuery.data, scriptureQuery.error, scriptureQuery.isFetched, lookupParams]);
-
-  // Scripture Keyword & Full-Text Search Handler
-  useEffect(() => {
-    const q = scriptureSearchQuery.trim();
-    if (q.length < 2) {
-      setScriptureSearchResults([]);
-      setIsSearchingScripture(false);
-      return;
-    }
-    let alive = true;
-    setIsSearchingScripture(true);
-    const timeout = setTimeout(() => {
-      void searchOfflineBible(q, 10).then((results) => {
-        if (!alive) return;
-        setScriptureSearchResults(results);
-        setIsSearchingScripture(false);
-      });
-    }, 180);
-    return () => {
-      alive = false;
-      clearTimeout(timeout);
-    };
-  }, [scriptureSearchQuery]);
-
-  // Public Hymn Search
-  useEffect(() => {
-    const query = search.trim();
-    if (!publicHymnSearch || query.length < 2) {
-      setPublicHymnResults([]);
-      setPublicHymnStatus('idle');
-      return;
-    }
-    let current = true;
-    setPublicHymnStatus('loading');
-    void searchPublicHymns(query)
-      .then((results) => {
-        if (!current) return;
-        setPublicHymnResults(results);
-        setPublicHymnStatus('ready');
-      })
-      .catch((error) => {
-        if (!current) return;
-        setPublicHymnResults([]);
-        setPublicHymnStatus('error');
-        setPublicHymnError(error instanceof Error ? error.message : 'Error searching hymn archive.');
-      });
-    return () => {
-      current = false;
-    };
-  }, [publicHymnSearch, search]);
-
-  useEffect(() => {
-    if (!timerRunning) return;
-    const id = setInterval(() => setCountdown((t) => Math.max(0, t - 1)), 1000);
-    return () => clearInterval(id);
-  }, [timerRunning]);
-
-  useEffect(() => {
     if (!notice) return;
     const id = setTimeout(() => setNotice(''), 3500);
     return () => clearTimeout(id);
@@ -581,7 +430,22 @@ export function Studio() {
     const slide = slides[index];
     if (!slide) return;
     setSelected(index);
+    setSelectedMediaDeckIdx(index);
     loadPreview(slide);
+  }
+
+  // Navigation specifically for Presentation Deck
+  function stepDeck(direction: number) {
+    if (!mediaDeckSlides.length) return;
+    const current = selectedMediaDeckIdx ?? selected ?? 0;
+    const nextIdx = Math.max(0, Math.min(mediaDeckSlides.length - 1, current + direction));
+    setSelectedMediaDeckIdx(nextIdx);
+    setSelected(nextIdx);
+    const target = mediaDeckSlides[nextIdx];
+    if (target) {
+      loadPreview(target);
+      if (autoPush) broadcast(target);
+    }
   }
 
   // Navigation for Staged Preview
@@ -591,11 +455,12 @@ export function Studio() {
     selectSlide(nextIdx);
   }
 
-  // Navigation for Live Output (synchronized with active slides)
+  // Navigation for Live Output
   function stepLive(direction: number) {
     if (!slides.length) return;
     const nextIdx = Math.max(0, Math.min(slides.length - 1, selected + direction));
     setSelected(nextIdx);
+    setSelectedMediaDeckIdx(nextIdx);
     const targetSlide = slides[nextIdx];
     if (targetSlide) {
       loadPreview(targetSlide);
@@ -603,7 +468,6 @@ export function Studio() {
     }
   }
 
-  // Instant display of a Scripture search result
   function displaySearchResult(result: SearchVerseResult, goLive = true) {
     setBook(result.book);
     setChapter(String(result.chapter));
@@ -622,7 +486,9 @@ export function Studio() {
     };
 
     setSlides([slide]);
+    setMediaDeckSlides([slide]);
     setSelected(0);
+    setSelectedMediaDeckIdx(0);
     loadPreview(slide);
 
     if (goLive) {
@@ -631,10 +497,11 @@ export function Studio() {
     }
   }
 
-  // Global & Panel-Scoped Keyboard Navigation
+  // Exclusive Keyboard Handling by Focused Partition
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
-      // Voice Result shortcuts when feedback popover is open
+      if (editingSlideIdx !== null) return;
+
       if (voiceFeedback) {
         if (e.key.toLowerCase() === 'a' || e.key === 'Enter') {
           e.preventDefault();
@@ -662,7 +529,6 @@ export function Studio() {
         e.target instanceof HTMLElement &&
         (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable);
 
-      // Push-to-Talk via Space or V
       if (!voiceFeedback && !voice.transcribing) {
         if (e.key.toLowerCase() === 'v' && !isInput && !e.repeat && !e.ctrlKey && !e.metaKey) {
           e.preventDefault();
@@ -679,7 +545,7 @@ export function Studio() {
       if (isInput) return;
       if (settings || guide || builderOpen || workflow) return;
 
-      // Function Panic Keys (F1: Blackout, F2: Clear Text, F3: Logo)
+      // Panic Functions
       if (e.key === 'F1') {
         e.preventDefault();
         setOutput((o) => ({ ...o, mode: o.mode === 'blackout' ? 'normal' : 'blackout' }));
@@ -712,25 +578,26 @@ export function Studio() {
         return;
       }
 
-      // Enter takes Preview slide to Live
+      // Enter key pushes current slide live
       if (e.key === 'Enter') {
         e.preventDefault();
-
-        // If the user has configured ANY highlights via typing or clicking,
-        // execute the compilation and projection routing right now!
-        if (highlightedVerses.length > 0) {
+        if (tab === 'Scriptures' && highlightedVerses.length > 0) {
           displayHighlightedVerses(autoPush);
-        } else if (slides[selected]) {
-          // Fallback: If no highlights exist, project whatever is in the active workspace slide
+          return;
+        }
+        if (slides[selected]) {
           broadcast(slides[selected]!);
+          setNotice(`Projected ${slides[selected]!.title || 'Slide'} Live`);
         }
         return;
       }
 
-      // Panel-Scoped Arrow Navigation
+      // Partitioned Arrow Navigation
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
         e.preventDefault();
-        if (activeFocus === 'live') {
+        if (activeFocus === 'deck') {
+          stepDeck(1);
+        } else if (activeFocus === 'live') {
           stepLive(1);
         } else {
           stepPreview(1);
@@ -739,7 +606,9 @@ export function Studio() {
       }
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
         e.preventDefault();
-        if (activeFocus === 'live') {
+        if (activeFocus === 'deck') {
+          stepDeck(-1);
+        } else if (activeFocus === 'live') {
           stepLive(-1);
         } else {
           stepPreview(-1);
@@ -762,13 +631,79 @@ export function Studio() {
     };
   });
 
+  // Load song into presentation deck
   function loadSong(item: Song) {
     const next = songSlides(item);
     setSong(item);
     setSlides(next);
+    setMediaDeckSlides(next);
+    setSelectedMediaDeckIdx(0);
     setSelected(0);
-    loadPreview(next[0] ?? welcomeSlide);
-    setTab('Songs');
+    setNotice(`Loaded "${item.title}" into Media Deck.`);
+  }
+
+  // Delete song permanently from library
+  function handleDeleteSong(targetSong: Song, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (confirm(`Are you sure you want to delete "${targetSong.title}"?`)) {
+      setLibrarySongs((prev) => prev.filter((s) => s.title !== targetSong.title));
+      try {
+        const saved = JSON.parse(localStorage.getItem('selah-local-songs') || '[]') as Song[];
+        const filtered = saved.filter((s) => s.title !== targetSong.title);
+        localStorage.setItem('selah-local-songs', JSON.stringify(filtered));
+      } catch {
+        // Fallback
+      }
+      setNotice(`Deleted "${targetSong.title}"`);
+    }
+  }
+
+  function handleEditSong(targetSong: Song, e: React.MouseEvent) {
+    e.stopPropagation();
+    setBuilderMode('song');
+    setBuilderSong(targetSong);
+    setBuilderOpen(true);
+  }
+
+  // Live Typo Editing: Updates active slide, deck, global song, and local storage
+  function saveSlideTypoFix() {
+    if (editingSlideIdx === null) return;
+    const updatedSlides = [...mediaDeckSlides];
+    const targetSlide = updatedSlides[editingSlideIdx];
+
+    if (targetSlide && targetSlide.kind !== 'scripture') {
+      const fixedSlide = { ...targetSlide, text: editingText };
+      updatedSlides[editingSlideIdx] = fixedSlide;
+      setMediaDeckSlides(updatedSlides);
+      setSlides(updatedSlides);
+
+      // Mutate global song structure
+      if (song) {
+        const updatedLyrics = [...song.lyrics];
+        updatedLyrics[editingSlideIdx] = editingText;
+        const updatedSong = { ...song, lyrics: updatedLyrics };
+
+        setSong(updatedSong);
+        setLibrarySongs((prev) => prev.map((s) => (s.title === updatedSong.title ? updatedSong : s)));
+
+        // Persist to local storage
+        try {
+          const saved = JSON.parse(localStorage.getItem('selah-local-songs') || '[]') as Song[];
+          const filtered = saved.filter((s) => s.title !== updatedSong.title);
+          localStorage.setItem('selah-local-songs', JSON.stringify([...filtered, updatedSong]));
+        } catch {
+          // Local fallback
+        }
+      }
+
+      if (selectedMediaDeckIdx === editingSlideIdx || selected === editingSlideIdx) {
+        loadPreview(fixedSlide);
+        if (autoPush) broadcast(fixedSlide);
+      }
+
+      setNotice('Verse updated globally and live!');
+    }
+    setEditingSlideIdx(null);
   }
 
   function parseLyrics(value: string) {
@@ -778,9 +713,11 @@ export function Studio() {
     const customSong = { title: 'Untitled worship song', author: 'Your lyrics', tag: 'Custom', lyrics: chunks };
     setSong(customSong);
     const next = songSlides(customSong);
+    setSong(customSong);
     setSlides(next);
+    setMediaDeckSlides(next);
+    setSelectedMediaDeckIdx(0);
     setSelected(0);
-    loadPreview(next[0] ?? welcomeSlide);
   }
 
   function pickBook(value: string) {
@@ -792,13 +729,11 @@ export function Studio() {
     setBook(match);
     setChapter(String(chapters[match]?.chapter ?? 1));
     setVerse('1');
-    setChecked([]);
     setInvalidField('');
     setBookFocused(false);
     return true;
   }
 
-  // Surrounding Sequence Handlers
   const loadSequence = useCallback((b: string, c: string | number, highlightRange?: number[]) => {
     void fetchChapterVersesSequence(b, c).then((seq) => {
       if (seq.length) {
@@ -811,17 +746,16 @@ export function Studio() {
   }, []);
 
   useEffect(() => {
-    loadSequence(book, chapter, checked.map((i) => i + 1));
+    loadSequence(book, chapter, [1]);
   }, [book, chapter, loadSequence]);
 
+  // Out-of-Sequence Verse Selector & Custom Formatter (e.g. 1-3,5)
   function toggleSequenceVerse(vNum: number) {
     setHighlightedVerses((prev) => {
       const exists = prev.includes(vNum);
       const updated = exists ? prev.filter((n) => n !== vNum) : [...prev, vNum].sort((a, b) => a - b);
 
       if (updated.length) {
-        // Group chronologically sorted highlights into readable discrete components
-        // e.g., [1, 2, 3, 5] turns into "1-3,5" instead of erasing into "1-5"
         const customString = updated.reduce((acc, current, idx, arr) => {
           if (idx === 0) return `${current}`;
           if (current === arr[idx - 1] + 1) {
@@ -830,7 +764,6 @@ export function Studio() {
             }
             return acc.endsWith('-') ? acc : `${acc}-`;
           }
-          // Handle isolated jumps gracefully with commas
           return acc.endsWith('-') ? `${acc.slice(0, -1)},${current}` : `${acc},${current}`;
         }, '');
 
@@ -842,19 +775,17 @@ export function Studio() {
     });
   }
 
-  // 1. UNIFIED PLAYLIST COMPILER & PROJECTION FORCE ENGINE
+  // Display Out-of-sequence Verses (e.g. 1-3,5 skips verse 4)
   function displayHighlightedVerses(takeLive = autoPush) {
     if (!highlightedVerses.length) {
       setNotice('Highlight at least one verse to display.');
       return;
     }
 
-    // Chronologically sort selected verses (e.g., [1, 2, 3, 5])
     const numbers = [...highlightedVerses].sort((a, b) => a - b);
 
     void fetchOfflinePassage(book, Number(chapter), numbers).then((offlinePassage) => {
       if (offlinePassage?.verses.length) {
-        // Compile ONLY the cherry-picked verses into slides
         const next = compileMappedScripture(
           book,
           chapter,
@@ -866,34 +797,31 @@ export function Studio() {
           backgroundType: scriptureBackgroundType,
         }));
 
-        // 1. Update the workspace deck immediately
         setSlides(next);
-        setSelected(0); // Lock focus cursor directly onto the first slide of your custom playlist
+        setMediaDeckSlides(next);
+        setSelectedMediaDeckIdx(0);
+        setSelected(0);
 
         const firstSelectedSlide = next[0];
         if (firstSelectedSlide) {
-          // 2. FORCE update directly to the Preview Monitor state
           setStorePreview(firstSelectedSlide);
 
-          // 3. If Live Sync is on (or user clicked 'Display Live'), push straight to the projector screen
           if (takeLive) {
             setOutput({ slide: firstSelectedSlide, mode: 'normal' });
             setStoreLive(firstSelectedSlide);
             setNotice(`Projected Selection Live`);
           } else {
-            // Load preview track states normally
             const routed = routePreview(firstSelectedSlide, false);
             setStorePreview(routed.preview);
             setNotice(`Staged Selection in Preview`);
           }
         }
       } else {
-        setLookupError('Could not process structural passage sequence formatting.');
+        setLookupError('Could not process passage sequence.');
       }
     });
   }
 
-  // 2. MANUAL FIELD ENTRY CONTROLLER (Forces immediate execution)
   function previewVerse(takeLiveNow = false) {
     const maxCh = getMaxChapters(book);
     if (!validNumber(chapter, maxCh)) {
@@ -916,12 +844,10 @@ export function Studio() {
     setHighlightedVerses(targetNumbers);
     loadSequence(book, chapter, targetNumbers);
 
-    // Immediately hand over control to the playlist engine to run the build!
     setTimeout(() => {
       displayHighlightedVerses(takeLiveNow);
     }, 10);
   }
-
 
   function chooseScriptureBackground(url: string, type: 'image' | 'video', id?: string) {
     const nextBackground = id ? (id.startsWith('scripture-') ? id : `local-background:${id}`) : url;
@@ -961,7 +887,9 @@ export function Studio() {
         }));
         if (next[0]) {
           setSlides(next);
+          setMediaDeckSlides(next);
           setSelected(0);
+          setSelectedMediaDeckIdx(0);
           loadPreview(next[0]);
           broadcast(next[0]);
           setNotice(`Voice Live: ${parsed.reference}`);
@@ -979,17 +907,18 @@ export function Studio() {
       ...items,
       { id, title: activeSlide.title, subtitle: `${slides.length} slides`, kind: activeSlide.kind },
     ]);
-    setNotice('Added to your service timeline');
+    setNotice('Added to service timeline');
   }
 
   function loadTimeline(id: string) {
-    setTimelineActive(id);
     const item = timeline.find((t) => t.id === id);
     if (!item) return;
     const saved = timelineSlides.current[id];
     if (saved?.[0]) {
       setSlides(saved);
+      setMediaDeckSlides(saved);
       setSelected(0);
+      setSelectedMediaDeckIdx(0);
       loadPreview(saved[0]);
       return;
     }
@@ -1007,7 +936,9 @@ export function Studio() {
         }),
       );
       setSlides(next);
+      setMediaDeckSlides(next);
       setSelected(0);
+      setSelectedMediaDeckIdx(0);
       loadPreview(next[0] ?? initialScripture);
     }
   }
@@ -1035,7 +966,6 @@ export function Studio() {
             </a>
           </div>
 
-          {/* Top Fixed LIVE BROADCAST Pulse */}
           <div className="flex items-center gap-3">
             <div className={`live-broadcast-pill ${!isLive ? 'off-air' : ''}`}>
               <span className="live-pulsing-dot" />
@@ -1043,7 +973,6 @@ export function Studio() {
               {isLive && <span className="opacity-70 font-normal truncate max-w-[160px]">| {output.slide.title}</span>}
             </div>
 
-            {/* Prominent Push to Talk Trigger */}
             <div className="prominent-voice-bar">
               <button
                 type="button"
@@ -1062,7 +991,6 @@ export function Studio() {
             </div>
           </div>
 
-          {/* Voice Result Popover with Speech Recognition Feedback & Enter-to-Display */}
           {voiceFeedback && (
             <div className="voice-result-popover">
               <h4>
@@ -1110,7 +1038,6 @@ export function Studio() {
             </div>
           )}
 
-          {/* Actions & Theme Picker */}
           <div className="header-actions">
             <div className="theme-picker" aria-label="Accent color">
               {accents.map(([value, label]) => (
@@ -1192,9 +1119,9 @@ export function Studio() {
         </div>
 
         {/* Main Workstation */}
-        <main className="workspace">
-          {/* Left Panel: Resource Library */}
-          <aside className="library-panel">
+        <main className="workspace flex gap-3 p-3 items-start min-h-[calc(100vh-110px)] w-full overflow-hidden">
+          {/* Left Sidebar: Resource Library */}
+          <aside className="library-panel w-80 shrink-0 flex flex-col gap-3">
             <div className="panel-heading">
               <div>
                 <Layers size={17} />
@@ -1228,7 +1155,6 @@ export function Studio() {
             </nav>
 
             <div className="library-content">
-              {/* Songs Tab */}
               {tab === 'Songs' && (
                 <>
                   <label className="search-input">
@@ -1312,29 +1238,49 @@ export function Studio() {
                     </div>
                   )}
 
-                  <div className="song-list">
+                  <div className="song-list flex flex-col gap-1.5 overflow-y-auto max-h-[320px]">
                     {librarySongs
                       .filter((item) => `${item.title} ${item.author}`.toLowerCase().includes(search.toLowerCase()))
                       .map((item) => (
-                        <Button
+                        <div
                           key={`${item.kind ?? 'song'}:${item.title}`}
-                          variant="ghost"
-                          className={`song-row ${song.title === item.title ? 'active' : ''}`}
+                          className={`song-row flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${song.title === item.title ? 'bg-primary/10 border border-primary/40' : 'hover:bg-white/5 border border-transparent'
+                            }`}
                           onClick={() => loadSong(item)}
                         >
-                          <span className="song-icon">
-                            <Music2 size={16} />
-                          </span>
-                          <span className="song-info">
-                            <strong>{item.title}</strong>
-                            <small>{item.author}</small>
-                          </span>
-                          <span className="song-count">{item.lyrics.length}</span>
-                        </Button>
+                          <div className="flex items-center gap-2.5 truncate">
+                            <span className="song-icon text-primary">
+                              <Music2 size={16} />
+                            </span>
+                            <div className="song-info flex flex-col truncate">
+                              <strong className="text-xs text-slate-100 truncate">{item.title}</strong>
+                              <small className="text-[10px] text-slate-400 truncate">{item.author}</small>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              className="p-1 hover:text-primary text-slate-400 transition-colors"
+                              title="Edit Song"
+                              onClick={(e) => handleEditSong(item, e)}
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              className="p-1 hover:text-red-400 text-slate-400 transition-colors"
+                              title="Delete Song"
+                              onClick={(e) => handleDeleteSong(item, e)}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
                       ))}
                   </div>
 
-                  <div className="drop-zone">
+                  <div className="drop-zone mt-2">
                     <div>
                       <span className="upload-icon">
                         <Upload size={16} />
@@ -1352,7 +1298,6 @@ export function Studio() {
                 </>
               )}
 
-              {/* Scriptures Tab */}
               {tab === 'Scriptures' && (
                 <>
                   <div className="subsection-title flex items-center justify-between">
@@ -1378,7 +1323,6 @@ export function Studio() {
                     </div>
                   </div>
 
-                  {/* Keyword / Reference Fast Search */}
                   <div className="scripture-search-wrap">
                     <label className="search-input">
                       <Search size={15} />
@@ -1396,7 +1340,6 @@ export function Studio() {
                       />
                     </label>
 
-                    {/* Instant Search Dropdown */}
                     {scriptureSearchResults.length > 0 && (
                       <div className="scripture-results-dropdown">
                         {scriptureSearchResults.map((res) => (
@@ -1414,7 +1357,6 @@ export function Studio() {
                     )}
                   </div>
 
-                  {/* Manual Passage Selector with Auto-Highlight & Boundary Validation */}
                   <div className="scripture-entry">
                     <div className="book-entry relative">
                       <input
@@ -1501,7 +1443,7 @@ export function Studio() {
                         setChapter(val);
                       }}
                       onKeyDown={(e) => {
-                        if (['Enter', 'Tab', 'ArrowRight'].includes(e.key)) {
+                        if (['Enter', 'Tab', 'ArrowRight'].includes(event.key)) {
                           e.preventDefault();
                           if (!chapter || chapter === '0') setChapter('1');
                           verseInput.current?.focus();
@@ -1518,7 +1460,7 @@ export function Studio() {
                       data-testid="input-bible-verse-range"
                       ref={verseInput}
                       aria-label="Verse or range"
-                      placeholder="1-5"
+                      placeholder="1-3,5"
                       value={verse}
                       className={invalidField === 'verse' ? 'field-shake' : ''}
                       onFocus={(e) => e.target.select()}
@@ -1529,10 +1471,9 @@ export function Studio() {
                           setVerse('');
                           return;
                         }
-                        if (!/^[\d,-]+$/.test(val)) return; // Allow commas for discrete inputs like 1,2,3,5
+                        if (!/^[\d,-]+$/.test(val)) return;
                         setVerse(val);
 
-                        // Parse out discrete highlights automatically if commas or dashes are typed
                         const maxV = getMaxVerses(book, chapter || '1');
                         const inlineIndices = parseVerseRange(val, maxV);
                         if (inlineIndices) {
@@ -1540,16 +1481,11 @@ export function Studio() {
                         }
                       }}
                       onKeyDown={(e) => {
-                        // Enter takes Preview slide to Live or packages the highlighted playlist selection
                         if (e.key === 'Enter') {
                           e.preventDefault();
-
-                          // If the operator has multiple discrete highlights active in the sidebar sequence,
-                          // compile and project that playlist instantly.
                           if (highlightedVerses.length > 0) {
                             displayHighlightedVerses(autoPush);
                           } else if (slides[selected]) {
-                            // Fallback: If no custom checklist highlights are present, take current preview live
                             broadcast(slides[selected]!);
                           }
                           return;
@@ -1560,12 +1496,9 @@ export function Studio() {
                           chapterInput.current?.select();
                         }
                       }}
-
                     />
-
                   </div>
 
-                  {/* Surrounding Sequence Engine */}
                   <div className="surrounding-sequence-panel">
                     <div className="sequence-panel-header">
                       <h4>
@@ -1582,7 +1515,7 @@ export function Studio() {
                           className="h-6 text-[10px] px-2 text-muted-foreground hover:text-foreground"
                           onClick={() => setHighlightedVerses([])}
                         >
-                          Clear Highlighted
+                          Clear
                         </Button>
                         <Button
                           variant="ghost"
@@ -1590,7 +1523,7 @@ export function Studio() {
                           className="h-6 text-[10px] px-2 text-primary"
                           onClick={() => setHighlightedVerses(sequenceVerses.map((v) => v.verseNumber))}
                         >
-                          Select All
+                          All
                         </Button>
                         <Button
                           size="sm"
@@ -1598,7 +1531,7 @@ export function Studio() {
                           disabled={!highlightedVerses.length}
                           onClick={() => displayHighlightedVerses(autoPush)}
                         >
-                          Display {autoPush ? 'Live' : 'Preview'} [↵]
+                          Display [↵]
                         </Button>
                       </div>
                     </div>
@@ -1655,7 +1588,6 @@ export function Studio() {
                     </Button>
                   </div>
 
-
                   <div className="mt-4">
                     <SectionLabel icon={<ImageIcon size={14} />}>SCRIPTURE BACKGROUND</SectionLabel>
                     <BackgroundPicker value={scriptureBackground} onChoose={chooseScriptureBackground} />
@@ -1663,13 +1595,12 @@ export function Studio() {
                 </>
               )}
 
-              {/* Media Tab */}
               {tab === 'Media' && (
                 <>
                   <SectionLabel icon={<ImageIcon size={14} />}>ROYALTY-FREE WORSHIP MEDIA</SectionLabel>
                   <BackgroundPicker
                     presets={false}
-                    onChoose={(url, type, id) => {
+                    onChoose={(url, type) => {
                       const slide: Slide = {
                         id: `media-${Date.now()}`,
                         title: 'Media Background',
@@ -1680,14 +1611,15 @@ export function Studio() {
                         backgroundType: type,
                       };
                       setSlides([slide]);
+                      setMediaDeckSlides([slide]);
                       setSelected(0);
+                      setSelectedMediaDeckIdx(0);
                       loadPreview(slide);
                     }}
                   />
                 </>
               )}
 
-              {/* Schedules Tab */}
               {tab === 'Schedules' && (
                 <>
                   <SectionLabel icon={<ListMusic size={14} />}>SERVICE TIMELINE</SectionLabel>
@@ -1711,139 +1643,284 @@ export function Studio() {
             </div>
           </aside>
 
-          {/* Center Stage: DUAL WORKSTATION (Preview & Fixed Live Output) */}
-          <section className="dual-workstation">
-            {/* Left: PREVIEW MONITOR (Staged) */}
+          {/* Center Column: Open View Space */}
+          <div className="flex-1 flex flex-col gap-3 min-w-0 h-full overflow-hidden">
+
+            {/* 🎵 HORIZONTAL SCROLLABLE PRESENTATION DECK WITH EXCLUSIVE FOCUS */}
             <div
-              className={`monitor-card ${activeFocus === 'preview' ? 'has-focus' : ''}`}
               tabIndex={0}
-              onClick={() => setActiveFocus('preview')}
-              onFocus={() => setActiveFocus('preview')}
+              onClick={() => setActiveFocus('deck')}
+              onFocus={() => setActiveFocus('deck')}
+              className={`media-presentation-timeline-pane bg-neutral-900/90 border rounded-xl p-2.5 flex flex-col gap-2 w-full shrink-0 shadow-lg transition-all outline-none ${activeFocus === 'deck' ? 'border-primary ring-1 ring-primary/40 shadow-[0_0_12px_rgba(0,242,254,0.15)]' : 'border-white/10'
+                }`}
             >
-              <div className="monitor-header">
-                <h3>
-                  <Layers size={14} className="text-primary" />
-                  <span>PREVIEW MONITOR</span>
-                  <small className="text-muted-foreground font-normal">
-                    (Slide {slides.length ? selected + 1 : 0} of {slides.length})
-                  </small>
-                </h3>
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  {activeFocus === 'preview' ? 'Focused (Arrows control preview)' : 'Click to Focus'}
-                </span>
-              </div>
-
-              <div className="monitor-screen-wrap">
-                <SlideScreen slide={activeSlide} />
-              </div>
-
-              <div className="monitor-footer">
-                <div className="monitor-nav-btns">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={selected <= 0}
-                    onClick={() => stepPreview(-1)}
-                  >
-                    <ArrowLeft size={14} className="mr-1" /> Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={selected >= slides.length - 1}
-                    onClick={() => stepPreview(1)}
-                  >
-                    Next <ArrowRight size={14} className="ml-1" />
-                  </Button>
-                </div>
-
-                <Button className="take-live-btn" onClick={() => broadcast(activeSlide)}>
-                  <Radio size={14} className="mr-1" /> TAKE LIVE (Enter ↵)
-                </Button>
-              </div>
-            </div>
-
-            {/* Right: FIXED LIVE OUTPUT MONITOR (What Congregation Sees) */}
-            <div
-              className={`monitor-card live-monitor ${activeFocus === 'live' ? 'has-focus' : ''}`}
-              tabIndex={0}
-              onClick={() => setActiveFocus('live')}
-              onFocus={() => setActiveFocus('live')}
-            >
-              <div className="monitor-header">
-                <h3>
-                  <span className="live-pulsing-dot" />
-                  <span className="text-red-400">PROJECTOR OUTPUT</span>
-                  <small className="text-muted-foreground font-normal">({outputName})</small>
-                </h3>
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className={`text-[10px] uppercase font-bold tracking-wider ${autoPush ? 'text-primary' : 'text-slate-400'}`}>
-                    {autoPush ? 'LIVE SYNC ON' : 'LIVE SYNC OFF'}
+                  <span className="text-[11px] font-bold text-primary tracking-wider uppercase">
+                    Presentation Deck · {song?.title || 'Amazing Grace'}
                   </span>
-                  <Switch
-                    checked={autoPush}
-                    onCheckedChange={(val) => {
-                      setAutoPush(val);
-                      setStoreAuto(val);
-                      if (val) broadcast(activeSlide);
-                      setNotice(val ? 'Live Sync ON: Passages broadcast immediately' : 'Live Sync OFF: Passages stage in preview first');
+                  {activeFocus === 'deck' && (
+                    <span className="text-[9px] font-bold bg-primary/20 text-primary px-1.5 py-0.5 rounded uppercase tracking-wider">
+                      FOCUSED · ARROW KEYS ACTIVE
+                    </span>
+                  )}
+                </div>
+
+                {/* Fixed Manual Navigation Buttons for Deck */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-400 mr-1">
+                    ({mediaDeckSlides.length} items loaded)
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-[10px] px-2 bg-white/5 border-white/10 hover:bg-white/10"
+                    disabled={(selectedMediaDeckIdx ?? 0) <= 0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      stepDeck(-1);
                     }}
-                    title="Toggle immediate live broadcasting"
-                  />
-                </div>
-              </div>
-
-              <div className="monitor-screen-wrap">
-                <SlideScreen slide={output.slide} mode={output.mode} />
-              </div>
-
-              <div className="monitor-footer">
-                <div className="monitor-nav-btns">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={selected <= 0}
-                    onClick={() => stepLive(-1)}
-                    title="Previous live verse / slide"
                   >
-                    <ArrowLeft size={14} className="mr-1" /> Prev Live
+                    <ChevronLeft size={12} className="mr-0.5" /> Prev
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={selected >= slides.length - 1}
-                    onClick={() => stepLive(1)}
-                    title="Next live verse / slide"
+                    className="h-6 text-[10px] px-2 bg-white/5 border-white/10 hover:bg-white/10"
+                    disabled={(selectedMediaDeckIdx ?? 0) >= mediaDeckSlides.length - 1}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      stepDeck(1);
+                    }}
                   >
-                    Next Live <ArrowRight size={14} className="ml-1" />
+                    Next <ChevronRight size={12} className="ml-0.5" />
                   </Button>
                 </div>
+              </div>
 
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className={`h-8 text-xs ${output.mode === 'blackout' ? 'text-red-400 font-bold' : ''}`}
-                    onClick={() =>
-                      setOutput((o) => ({ ...o, mode: o.mode === 'blackout' ? 'normal' : 'blackout' }))
-                    }
-                  >
-                    <Square size={13} className="mr-1" /> Black
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className={`h-8 text-xs ${output.mode === 'clear' ? 'text-amber-400 font-bold' : ''}`}
-                    onClick={() =>
-                      setOutput((o) => ({ ...o, mode: o.mode === 'clear' ? 'normal' : 'clear' }))
-                    }
-                  >
-                    <TextCursorInput size={13} className="mr-1" /> Clear Text
-                  </Button>
-                </div>
+              <div className="custom-presentation-scroll-deck flex gap-2.5 overflow-x-auto pb-1 scrollbar-thin">
+                {mediaDeckSlides.map((slideItem, index) => {
+                  const isCurrentActive = selectedMediaDeckIdx === index;
+                  const isScripture = slideItem.kind === 'scripture';
+
+                  return (
+                    <div
+                      key={slideItem.id || `media-deck-${index}`}
+                      ref={(el) => (deckCardsRef.current[index] = el)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveFocus('deck');
+                        setSelectedMediaDeckIdx(index);
+                        setSelected(index);
+                        loadPreview(slideItem);
+                        if (autoPush) broadcast(slideItem);
+                      }}
+                      className={`flex-none w-44 aspect-video rounded-md p-2 border cursor-pointer flex flex-col justify-between transition-all relative group ${isCurrentActive
+                          ? 'bg-primary/10 border-primary shadow-[0_0_10px_rgba(0,242,254,0.25)] text-white'
+                          : 'bg-white/5 border-white/10 hover:bg-white/10 text-slate-300'
+                        }`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="text-[9px] font-bold text-primary uppercase">
+                          {slideItem.label || `Verse ${index + 1}`}
+                        </span>
+
+                        {/* Inline Edit Trigger (Disabled on Scripture) */}
+                        {!isScripture && (
+                          <button
+                            type="button"
+                            className="text-[9px] px-1.5 py-0.5 rounded bg-white/10 hover:bg-primary hover:text-black text-slate-300 transition-colors opacity-80 group-hover:opacity-100"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingSlideIdx(index);
+                              setEditingText(slideItem.text);
+                            }}
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </div>
+
+                      <p className="text-[11px] line-clamp-3 leading-snug my-1">
+                        {slideItem.text || '[Blank / Background Frame]'}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          </section>
+
+            {/* Inline Typo Editor */}
+            {editingSlideIdx !== null && (
+              <div className="bg-neutral-900 border border-primary/40 rounded-xl p-3 flex flex-col gap-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-primary flex items-center gap-1.5">
+                    <Edit2 size={13} /> Edit Slide Text Live & Save to Global Song
+                  </span>
+                  <button
+                    type="button"
+                    className="text-xs text-slate-400 hover:text-white"
+                    onClick={() => setEditingSlideIdx(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <textarea
+                  className="w-full bg-black/60 border border-white/10 rounded p-2 text-xs text-white focus:outline-none focus:border-primary"
+                  rows={2}
+                  value={editingText}
+                  onChange={(e) => setEditingText(e.target.value)}
+                />
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" className="h-7 text-xs bg-primary text-black font-bold" onClick={saveSlideTypoFix}>
+                    Apply Changes & Sync Global Song
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Center Stage: DUAL WORKSTATION */}
+            <section className="dual-workstation flex-1 grid grid-cols-2 gap-3 w-full min-h-0">
+              {/* Left: PREVIEW MONITOR */}
+              <div
+                className={`monitor-card flex flex-col h-full rounded-xl border bg-neutral-900/80 p-2 transition-all outline-none ${activeFocus === 'preview' ? 'border-primary ring-1 ring-primary/40 shadow-[0_0_12px_rgba(0,242,254,0.15)]' : 'border-white/10'
+                  }`}
+                tabIndex={0}
+                onClick={() => setActiveFocus('preview')}
+                onFocus={() => setActiveFocus('preview')}
+              >
+                <div className="monitor-header py-1 px-2 flex justify-between items-center mb-1">
+                  <h3 className="text-xs font-bold flex items-center gap-1.5 text-slate-200">
+                    <Layers size={13} className="text-primary" />
+                    <span>PREVIEW MONITOR</span>
+                    <small className="text-slate-400 font-normal">
+                      ({slides.length ? selected + 1 : 0}/{slides.length})
+                    </small>
+                  </h3>
+                  {activeFocus === 'preview' && (
+                    <span className="text-[8px] font-bold bg-primary/20 text-primary px-1.5 py-0.5 rounded uppercase">
+                      FOCUSED
+                    </span>
+                  )}
+                </div>
+
+                <div className="monitor-screen-wrap flex-1 flex items-center justify-center bg-black/60 rounded-md overflow-hidden p-1 max-h-[220px]">
+                  <SlideScreen slide={activeSlide} />
+                </div>
+
+                <div className="monitor-footer py-1 px-1 flex items-center justify-between mt-2">
+                  <div className="monitor-nav-btns flex gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[11px] px-2"
+                      disabled={selected <= 0}
+                      onClick={() => stepPreview(-1)}
+                    >
+                      <ArrowLeft size={11} className="mr-1" /> Prev
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[11px] px-2"
+                      disabled={selected >= slides.length - 1}
+                      onClick={() => stepPreview(1)}
+                    >
+                      Next <ArrowRight size={11} className="ml-1" />
+                    </Button>
+                  </div>
+
+                  <Button size="sm" className="take-live-btn h-6 text-[11px] font-bold px-2.5 bg-primary text-black" onClick={() => broadcast(activeSlide)}>
+                    <Radio size={12} className="mr-1" /> TAKE LIVE (↵)
+                  </Button>
+                </div>
+              </div>
+
+              {/* Right: PROJECTOR OUTPUT */}
+              <div
+                className={`monitor-card live-monitor flex flex-col h-full rounded-xl border bg-neutral-900/80 p-2 transition-all outline-none ${activeFocus === 'live' ? 'border-red-500 ring-1 ring-red-500/40 shadow-[0_0_12px_rgba(239,68,68,0.15)]' : 'border-white/10'
+                  }`}
+                tabIndex={0}
+                onClick={() => setActiveFocus('live')}
+                onFocus={() => setActiveFocus('live')}
+              >
+                <div className="monitor-header py-1 px-2 flex justify-between items-center mb-1">
+                  <h3 className="text-xs font-bold flex items-center gap-1.5">
+                    <span className="live-pulsing-dot" />
+                    <span className="text-red-400">PROJECTOR OUTPUT</span>
+                    <small className="text-slate-400 font-normal">({outputName})</small>
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    {activeFocus === 'live' && (
+                      <span className="text-[8px] font-bold bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded uppercase">
+                        FOCUSED
+                      </span>
+                    )}
+                    <Switch
+                      checked={autoPush}
+                      onCheckedChange={(val) => {
+                        setAutoPush(val);
+                        setStoreAuto(val);
+                        if (val) broadcast(activeSlide);
+                        setNotice(val ? 'Live Sync ON' : 'Live Sync OFF');
+                      }}
+                      title="Toggle immediate live broadcasting"
+                    />
+                  </div>
+                </div>
+
+                <div className="monitor-screen-wrap flex-1 flex items-center justify-center bg-black/60 rounded-md overflow-hidden p-1 max-h-[220px]">
+                  <SlideScreen slide={output.slide} mode={output.mode} />
+                </div>
+
+                <div className="monitor-footer py-1 px-1 flex items-center justify-between mt-2">
+                  <div className="monitor-nav-btns flex gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[11px] px-2"
+                      disabled={selected <= 0}
+                      onClick={() => stepLive(-1)}
+                    >
+                      <ArrowLeft size={11} className="mr-1" /> Prev Live
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[11px] px-2"
+                      disabled={selected >= slides.length - 1}
+                      onClick={() => stepLive(1)}
+                    >
+                      Next Live <ArrowRight size={11} className="ml-1" />
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={`h-6 text-[11px] px-1.5 ${output.mode === 'blackout' ? 'text-red-400 font-bold' : ''}`}
+                      onClick={() =>
+                        setOutput((o) => ({ ...o, mode: o.mode === 'blackout' ? 'normal' : 'blackout' }))
+                      }
+                    >
+                      <Square size={11} className="mr-1" /> Black
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={`h-6 text-[11px] px-1.5 ${output.mode === 'clear' ? 'text-amber-400 font-bold' : ''}`}
+                      onClick={() =>
+                        setOutput((o) => ({ ...o, mode: o.mode === 'clear' ? 'normal' : 'clear' }))
+                      }
+                    >
+                      <TextCursorInput size={11} className="mr-1" /> Clear
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
         </main>
 
         {/* Footer */}
