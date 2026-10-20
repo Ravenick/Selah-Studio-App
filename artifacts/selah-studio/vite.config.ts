@@ -17,6 +17,9 @@ const basePath = process.env.BASE_PATH ?? '/';
 
 export default defineConfig({
   base: basePath,
+  envDir: path.resolve(import.meta.dirname, '..', '..'),
+  // Only expose client configuration. Never bundle provider credentials.
+  envPrefix: ['VITE_API_BASE_URL', 'VITE_SCRIPTURE_BIBLE_ID', 'VITE_BIBLE_ID_'],
   plugins: [
     react(),
     tailwindcss(),

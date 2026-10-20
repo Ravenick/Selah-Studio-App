@@ -31,7 +31,7 @@ router.get("/scripture", async (req, res): Promise<void> => {
     return;
   }
 
-  const apiKey = process.env.API_BIBLE_KEY || process.env.VITE_API_BIBLE_KEY;
+  const apiKey = process.env.API_BIBLE_KEY;
   if (!apiKey) {
     res.status(503).json({ error: "Scripture lookup is not configured." });
     return;
@@ -112,7 +112,7 @@ router.post(
       return;
     }
 
-    const token = process.env.HF_ACCESS_TOKEN || process.env.VITE_HF_ACCESS_TOKEN;
+    const token = process.env.HF_ACCESS_TOKEN;
     if (!token) {
       res.status(503).json({ error: "Voice transcription is not configured." });
       return;

@@ -49,11 +49,14 @@ export function BackgroundPicker({
       .catch(() => setStatus('Local storage unavailable.'));
     return () => {
       mounted = false;
+      urls.current.forEach((url) => URL.revokeObjectURL(url));
+      urls.current = [];
     };
   }, []);
 
   function choose(url: string, type: 'image' | 'video', id: string) {
-    onChoose(url, type, id);
+    const isBundledPreset = [...motionLoops, ...stillScenes].some((item) => item.id === id);
+    onChoose(url, type, isBundledPreset ? undefined : id);
     if (presets) {
       void saveScriptureTheme(id).catch(() => setStatus('Preference could not be saved.'));
     }
@@ -146,7 +149,7 @@ export function BackgroundPicker({
                 title={item.name}
               >
                 <div className="bg-thumb-wrap">
-                  <img src={item.thumbnailUrl} alt={item.name} loading="lazy" />
+                  <video src={item.mediaUrl} muted loop autoPlay playsInline preload="metadata" aria-label={`${item.name} motion preview`} />
                   <span className="media-badge video-badge">
                     <Play size={10} fill="currentColor" /> MP4
                   </span>

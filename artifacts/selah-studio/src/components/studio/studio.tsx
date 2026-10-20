@@ -69,12 +69,13 @@ import {
   readSavedSongs,
   readTheme,
   readWorkspacePreferences,
+  removeLocalSong,
   saveLocalSong,
   saveTheme,
   saveWorkspacePreferences,
   stashBackground,
 } from '@/lib/local-workspace';
-import { getGetScriptureQueryKey, useGetScripture } from '@workspace/api-client-react';
+import { getGetScriptureQueryKey, getScripture, useGetScripture } from '@workspace/api-client-react';
 import { usePushToTalk } from '@/hooks/use-push-to-talk';
 import { parseBibleContent } from '@/lib/scripture-content';
 import { searchPublicHymns, type PublicHymn } from '@/lib/song-search';
@@ -87,6 +88,7 @@ import {
   type SequenceVerseItem,
 } from '@/lib/offline-bible';
 import { parseSpokenBibleReference, type ParsedSpokenReference } from '@/lib/spoken-bible-parser';
+import { PRESENTATION_COLORS, saveScriptureAppearance, useScriptureAppearance } from '@/lib/scripture-appearance';
 
 const logo = { url: '/selah-logo.png' };
 const DEFAULT_BIBLE_ID = import.meta.env.VITE_SCRIPTURE_BIBLE_ID || 'de4e12af7f28f599-01';
@@ -371,6 +373,7 @@ export function Studio() {
     setNotice('YouTube media added to the presentation deck.');
   }
   const [builderOpen, setBuilderOpen] = useState(false);
+  const [deleteTargetSong, setDeleteTargetSong] = useState<Song | null>(null);
   const [autoPush, setAutoPush] = useState(false);
   const setStoreAuto = useAppStore((state) => state.setAutoLiveSync);
   const setStorePreview = useAppStore((state) => state.setPreview);
@@ -460,10 +463,8 @@ export function Studio() {
     if (payload.slides) setSlides(payload.slides);
     if (payload.mediaDeckSlides) setMediaDeckSlides(payload.mediaDeckSlides);
     if (payload.song) setSong(payload.song);
-    if (payload.scriptureBackground) setScriptureBackground(payload.scriptureBackground);
     if (payload.mediaBackground) setMediaBackground(payload.mediaBackground);
     if (payload.mediaBackgroundType) setMediaBackgroundType(payload.mediaBackgroundType);
-    if (payload.scriptureBackgroundType) setScriptureBackgroundType(payload.scriptureBackgroundType);
     if (payload.name) setCurrentScheduleName(payload.name);
 
     setSelected(0);
@@ -494,10 +495,8 @@ export function Studio() {
 
   // Background Selection
   // Default Constant Backgrounds
-  const [scriptureBackground, setScriptureBackground] = useState(
-    '/backgrounds/stills/Echo Spheres Party - 16x9.jpg'
-  );
-  const [scriptureBackgroundType, setScriptureBackgroundType] = useState<'image' | 'video'>('image');
+  const scriptureBackground = '/backgrounds/stills/Echo Spheres Party - 16x9.jpg';
+  const scriptureBackgroundType = 'image' as const;
 
 
   // Scripture Keyword & Full-text Search
@@ -505,6 +504,9 @@ export function Studio() {
   const [scriptureSearchResults, setScriptureSearchResults] = useState<SearchVerseResult[]>([]);
   const [isSearchingScripture, setIsSearchingScripture] = useState(false);
   const [selectedTranslation, setSelectedTranslation] = useState<string>('KJV');
+  const scriptureAppearance = useScriptureAppearance();
+  const scriptureRequestId = useRef(0);
+  const sequenceRequestId = useRef(0);
 
   // Surrounding Sequence Engine
   const [sequenceVerses, setSequenceVerses] = useState<SequenceVerseItem[]>([]);
@@ -640,8 +642,6 @@ export function Studio() {
         ]);
         setTheme(accent);
         if (preferences.autoPush !== undefined) setAutoPush(preferences.autoPush);
-        if (preferences.scriptureBackground) setScriptureBackground(preferences.scriptureBackground);
-        if (preferences.scriptureBackgroundType) setScriptureBackgroundType(preferences.scriptureBackgroundType);
         if (preferences.outputName) setOutputName(preferences.outputName);
         setThemeLoaded(true);
         setPreferencesLoaded(true);
@@ -752,18 +752,38 @@ export function Studio() {
     }
   }
 
-  function displaySearchResult(result: SearchVerseResult, goLive = true) {
+  async function displaySearchResult(result: SearchVerseResult, goLive = true) {
     setBook(result.book);
     setChapter(String(result.chapter));
     setVerse(String(result.verse));
     setScriptureSearchQuery('');
     setScriptureSearchResults([]);
 
+    let title = result.reference;
+    let text = result.text;
+    const requestId = ++scriptureRequestId.current;
+    if (selectedTranslation !== 'KJV') {
+      try {
+        const passage = await getScripture(scriptureParams(result.book, String(result.chapter), String(result.verse), selectedTranslation));
+        if (requestId !== scriptureRequestId.current) return;
+        const parsed = parseBibleContent(passage.content);
+        if (!parsed.verses[0]) throw new Error(`No verse was returned for ${passage.reference}.`);
+        title = passage.reference;
+        text = parsed.verses[0];
+      } catch (error) {
+        if (requestId !== scriptureRequestId.current) return;
+        const message = error instanceof Error ? error.message : `Could not load ${selectedTranslation}.`;
+        setLookupError(message);
+        setNotice(message);
+        return;
+      }
+    }
+
     const slide: Slide = {
       id: `${result.book}-${result.chapter}-${result.verse}`,
-      title: result.reference,
+      title,
       label: `Verse ${result.verse}`,
-      text: result.text,
+      text,
       kind: 'scripture',
       background: scriptureBackground,
       backgroundType: scriptureBackgroundType,
@@ -777,7 +797,7 @@ export function Studio() {
 
     if (goLive) {
       broadcast(slide);
-      setNotice(`Displayed ${result.reference} Live`);
+      setNotice(`Displayed ${title} (${selectedTranslation}) live`);
     }
   }
 
@@ -942,17 +962,22 @@ export function Studio() {
   // Delete song permanently from library
   function handleDeleteSong(targetSong: Song, e: React.MouseEvent) {
     e.stopPropagation();
-    if (confirm(`Are you sure you want to delete "${targetSong.title}"?`)) {
-      setLibrarySongs((prev) => prev.filter((s) => s.title !== targetSong.title));
-      try {
-        const saved = JSON.parse(localStorage.getItem('selah-local-songs') || '[]') as Song[];
-        const filtered = saved.filter((s) => s.title !== targetSong.title);
-        localStorage.setItem('selah-local-songs', JSON.stringify(filtered));
-      } catch {
-        // Fallback
-      }
-      setNotice(`Deleted "${targetSong.title}"`);
+    setDeleteTargetSong(targetSong);
+  }
+
+  function confirmDeleteSong() {
+    if (!deleteTargetSong) return;
+    const targetSong = deleteTargetSong;
+    setLibrarySongs((prev) => prev.filter((song) => !(song.title === targetSong.title && song.kind === targetSong.kind)));
+    try {
+      const saved = JSON.parse(localStorage.getItem('selah-local-songs') || '[]') as Song[];
+      localStorage.setItem('selah-local-songs', JSON.stringify(saved.filter((song) => !(song.title === targetSong.title && song.kind === targetSong.kind))));
+    } catch {
+      // Dexie remains the canonical storage for saved songs.
     }
+    void removeLocalSong(targetSong);
+    setNotice(`Deleted "${targetSong.title}"`);
+    setDeleteTargetSong(null);
   }
 
   function handleEditSong(targetSong: Song, e: React.MouseEvent) {
@@ -1031,19 +1056,44 @@ export function Studio() {
   }
 
   const loadSequence = useCallback((b: string, c: string | number, highlightRange?: number[]) => {
-    void fetchChapterVersesSequence(b, c).then((seq) => {
-      if (seq.length) {
+    const requestId = ++sequenceRequestId.current;
+    if (selectedTranslation === 'KJV') {
+      void fetchChapterVersesSequence(b, c).then((seq) => {
+        if (requestId !== sequenceRequestId.current || !seq.length) return;
         setSequenceVerses(seq);
-        if (highlightRange && highlightRange.length) {
-          setHighlightedVerses(highlightRange);
-        }
-      }
+        if (highlightRange?.length) setHighlightedVerses(highlightRange);
+      });
+      return;
+    }
+
+    const canonicalBook = resolveBook(b) ?? b;
+    const code = bibleCodes[canonicalBook] ?? canonicalBook.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3);
+    const bibleId = BIBLE_TRANSLATIONS[selectedTranslation]?.id ?? DEFAULT_BIBLE_ID;
+    void getScripture({ bibleId, passageId: `${code}.${c}` }).then((passage) => {
+      if (requestId !== sequenceRequestId.current) return;
+      const parsed = parseBibleContent(passage.content);
+      const numbers = parsed.verseNumbers.length === parsed.verses.length
+        ? parsed.verseNumbers
+        : parsed.verses.map((_, index) => index + 1);
+      const sequence = parsed.verses.map((text, index) => ({
+        verseNumber: numbers[index] ?? index + 1,
+        text,
+        reference: `${canonicalBook} ${c}:${numbers[index] ?? index + 1}`,
+      }));
+      if (!sequence.length) throw new Error('The translation returned no verses for this chapter.');
+      setSequenceVerses(sequence);
+      if (highlightRange?.length) setHighlightedVerses(highlightRange);
+      setLookupError('');
+    }).catch((error: unknown) => {
+      if (requestId !== sequenceRequestId.current) return;
+      setLookupError(error instanceof Error ? error.message : `Could not load ${selectedTranslation}.`);
     });
-  }, []);
+  }, [selectedTranslation]);
 
   useEffect(() => {
-    loadSequence(book, chapter, [1]);
-  }, [book, chapter, loadSequence]);
+    const timer = window.setTimeout(() => loadSequence(book, chapter), selectedTranslation === 'KJV' ? 0 : 300);
+    return () => window.clearTimeout(timer);
+  }, [book, chapter, loadSequence, selectedTranslation]);
 
   // Out-of-Sequence Verse Selector & Custom Formatter (e.g. 1-3,5)
   function toggleSequenceVerse(vNum: number) {
@@ -1072,50 +1122,74 @@ export function Studio() {
   }
 
   // Display Out-of-sequence Verses (e.g. 1-3,5 skips verse 4)
-  function displayHighlightedVerses(takeLive = autoPush) {
+  async function displayHighlightedVerses(takeLive = autoPush, translationKey = selectedTranslation) {
     if (!highlightedVerses.length) {
       setNotice('Highlight at least one verse to display.');
       return;
     }
 
     const numbers = [...highlightedVerses].sort((a, b) => a - b);
+    const requestId = ++scriptureRequestId.current;
 
-    void fetchOfflinePassage(book, Number(chapter), numbers).then((offlinePassage) => {
-      if (offlinePassage?.verses.length) {
-        const next = compileMappedScripture(
-          book,
-          chapter,
-          offlinePassage.verses,
-          offlinePassage.verseNumbers
-        ).map((slide) => ({
-          ...slide,
-          background: scriptureBackground,
-          backgroundType: scriptureBackgroundType,
-        }));
-
-        setSlides(next);
-        setMediaDeckSlides(next);
-        setSelectedMediaDeckIdx(0);
-        setSelected(0);
-
-        const firstSelectedSlide = next[0];
-        if (firstSelectedSlide) {
-          setStorePreview(firstSelectedSlide);
-
-          if (takeLive) {
-            setOutput({ slide: firstSelectedSlide, mode: 'normal', transitionMode });
-            setStoreLive(firstSelectedSlide);
-            setNotice(`Projected Selection Live`);
-          } else {
-            const routed = routePreview(firstSelectedSlide, false);
-            setStorePreview(routed.preview);
-            setNotice(`Staged Selection in Preview`);
-          }
-        }
+    try {
+      let verses: string[];
+      let verseNumbers: number[];
+      if (translationKey === 'KJV') {
+        const passage = await fetchOfflinePassage(book, Number(chapter), numbers);
+        if (!passage?.verses.length) throw new Error('Could not process passage sequence.');
+        verses = passage.verses;
+        verseNumbers = passage.verseNumbers;
       } else {
-        setLookupError('Could not process passage sequence.');
+        const ranges: number[][] = [];
+        for (const number of numbers) {
+          const current = ranges[ranges.length - 1];
+          if (current && number === current[current.length - 1] + 1) current.push(number);
+          else ranges.push([number]);
+        }
+        const passages = await Promise.all(ranges.map(([start, ...rest]) => {
+          const end = rest[rest.length - 1];
+          return getScripture(scriptureParams(book, chapter, end ? `${start}-${end}` : String(start), translationKey));
+        }));
+        const parsedRanges = passages.map((passage) => parseBibleContent(passage.content));
+        verses = parsedRanges.flatMap((parsed) => parsed.verses);
+        verseNumbers = parsedRanges.flatMap((parsed, index) => parsed.verseNumbers.length === parsed.verses.length
+          ? parsed.verseNumbers
+          : ranges[index].slice(0, parsed.verses.length));
+        if (!verses.length) throw new Error('The selected translation returned no verses.');
       }
-    });
+
+      if (requestId !== scriptureRequestId.current) return;
+      const next = compileMappedScripture(book, chapter, verses, verseNumbers).map((slide) => ({
+        ...slide,
+        background: scriptureBackground,
+        backgroundType: scriptureBackgroundType,
+      }));
+
+      setLookupError('');
+      setSlides(next);
+      setMediaDeckSlides(next);
+      setSelectedMediaDeckIdx(0);
+      setSelected(0);
+
+      const firstSelectedSlide = next[0];
+      if (firstSelectedSlide) {
+        setStorePreview(firstSelectedSlide);
+        if (takeLive) {
+          setOutput({ slide: firstSelectedSlide, mode: 'normal', transitionMode });
+          setStoreLive(firstSelectedSlide);
+          setNotice(`Projected ${translationKey} selection live`);
+        } else {
+          const routed = routePreview(firstSelectedSlide, false);
+          setStorePreview(routed.preview);
+          setNotice(`Staged ${translationKey} selection in preview`);
+        }
+      }
+    } catch (error) {
+      if (requestId !== scriptureRequestId.current) return;
+      const message = error instanceof Error ? error.message : `Could not load ${translationKey}.`;
+      setLookupError(message);
+      setNotice(message);
+    }
   }
 
   function previewVerse(takeLiveNow = false) {
@@ -1147,36 +1221,8 @@ export function Studio() {
 
   // Set Scripture Background
   // Persistent Scripture Background Chooser
-  function chooseScriptureBackground(asset: MediaAsset) {
-    setScriptureBackground(asset.url);
-    setScriptureBackgroundType(asset.type);
-
-    setSlides((prev) =>
-      prev.map((s) =>
-        s.kind === 'scripture'
-          ? { ...s, background: asset.url, backgroundType: asset.type }
-          : s
-      )
-    );
-    setMediaDeckSlides((prev) =>
-      prev.map((s) =>
-        s.kind === 'scripture'
-          ? { ...s, background: asset.url, backgroundType: asset.type }
-          : s
-      )
-    );
-    setOutput((current) => current.slide.kind === 'scripture'
-      ? { ...current, slide: { ...current.slide, background: asset.url, backgroundType: asset.type } }
-      : current);
-
-    if (slides[selected]?.kind === 'scripture') {
-      const updated = { ...slides[selected], background: asset.url, backgroundType: asset.type };
-      loadPreview(updated);
-      if (autoPush) broadcast(updated);
-    }
-
-    setIsDirty(true);
-    setNotice('Scripture background updated as active constant.');
+  function chooseScriptureBackground(_asset: MediaAsset) {
+    setIsMediaExplorerOpen(false);
   }
 
   // Set Song / Sermon Background
@@ -1674,26 +1720,54 @@ export function Studio() {
                 <>
                   <div className="subsection-title flex items-center justify-between">
                     <span>KEYWORD / PASSAGE SEARCH</span>
-                    <div className="flex items-center gap-1">
+                    <div className="bible-version-switcher" role="group" aria-label="Bible translation">
                       {Object.entries(BIBLE_TRANSLATIONS).map(([key, trans]) => (
                         <button
                           key={key}
                           type="button"
-                          className={`px-1.5 py-0.5 text-[9px] font-bold rounded transition-colors ${selectedTranslation === key
-                            ? 'bg-primary text-black shadow-sm'
-                            : 'bg-white/5 text-slate-400 hover:bg-white/10'
-                            }`}
+                          className={`bible-version-button ${selectedTranslation === key ? 'active' : ''}`}
+                          aria-pressed={selectedTranslation === key}
                           onClick={() => {
                             setSelectedTranslation(key);
-                            setNotice(`Bible translation set to ${trans.label}`);
+                            setNotice(`${trans.label} selected; loading the current passage.`);
+                            if (validNumber(chapter, getMaxChapters(book)) && highlightedVerses.length) {
+                              void displayHighlightedVerses(autoPush, key);
+                            }
                           }}
-                          title={`Switch to ${trans.label}`}
+                          title={trans.isOffline ? 'King James Version (available offline)' : `Load ${trans.label} from API.Bible`}
                         >
-                          {key}
+                          <span>{key}</span>
+                          {trans.isOffline && <small>OFFLINE</small>}
                         </button>
                       ))}
                     </div>
                   </div>
+
+                  <details className="scripture-appearance-panel">
+                    <summary>Scripture text style</summary>
+                    <div className="scripture-appearance-controls">
+                      <label>
+                        Font
+                        <select
+                          value={scriptureAppearance.font}
+                          onChange={(event) => saveScriptureAppearance({ ...scriptureAppearance, font: event.target.value as typeof scriptureAppearance.font })}
+                        >
+                          <option value="font-montserrat">Montserrat</option>
+                          <option value="font-bebas-neue">Bebas Neue</option>
+                          <option value="font-dm">DM Sans</option>
+                          <option value="font-georgia">Georgia</option>
+                          <option value="font-mono">Monospace</option>
+                        </select>
+                      </label>
+                      <label>
+                        Verse color
+                        <div className="scripture-color-grid" role="group" aria-label="Scripture text color palette">
+                          {PRESENTATION_COLORS.map((color) => <button key={color} type="button" className={scriptureAppearance.textColor.toLowerCase() === color ? 'selected' : ''} style={{ backgroundColor: color }} aria-label={`Scripture text color ${color}`} aria-pressed={scriptureAppearance.textColor.toLowerCase() === color} title={color} onClick={() => saveScriptureAppearance({ ...scriptureAppearance, textColor: color })} />)}
+                        </div>
+                      </label>
+                    </div>
+                  </details>
+                  {lookupError && <p className="scripture-appearance-error" role="alert">{lookupError}</p>}
 
                   <div className="scripture-search-wrap">
                     <label className="search-input">
@@ -1964,26 +2038,6 @@ export function Studio() {
                       ) : null;
                     })()}
                   </div>
-                  {/* Scripture Active Background Card */}
-                  <div className="p-2.5 rounded-lg bg-white/5 border border-white/10 flex flex-col gap-1.5">
-                    <span className="text-[10px] font-bold text-primary uppercase">Active Scripture Background</span>
-                    <div className="flex items-center gap-2">
-                      <div className="w-12 h-8 rounded bg-black/60 border border-white/10 overflow-hidden flex items-center justify-center">
-                        {scriptureBackgroundType === 'video' ? (
-                          <video src={scriptureBackground} className="w-full h-full object-cover" autoPlay loop muted />
-                        ) : (
-                          <img src={scriptureBackground} alt="" className="w-full h-full object-cover" />
-                        )}
-                      </div>
-                      <div className="flex flex-col">
-                        <strong className="text-xs text-slate-200">
-                          {scriptureBackground.split('/').pop()}
-                        </strong>
-                        <span className="text-[10px] text-slate-400 capitalize">{scriptureBackgroundType} Loop</span>
-                      </div>
-                    </div>
-                  </div>
-
                   {/* Song/Sermon Active Background Card */}
                   <div className="p-2.5 rounded-lg bg-white/5 border border-white/10 flex flex-col gap-1.5">
                     <span className="text-[10px] font-bold text-primary uppercase">Active Song/Sermon Background</span>
@@ -2366,76 +2420,7 @@ export function Studio() {
               </div>
 
               {/* Internal Scrollable Content */}
-              <div className="grid grid-cols-2 gap-6 overflow-y-auto pr-2 flex-1 scrollbar-thin">
-
-                {/* ==================== SCRIPTURE COLUMN ==================== */}
-                <div className="flex flex-col gap-4">
-                  <div className="sticky top-0 bg-neutral-900/95 py-2 z-10 border-b border-white/10 flex justify-between items-center">
-                    <span className="text-xs font-bold text-primary uppercase tracking-wider">
-                      📖 Scripture Backgrounds
-                    </span>
-                  </div>
-
-                  {/* Scripture Motions Section */}
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
-                      <span className="flex items-center gap-1">🎥 Motion Loops (.mp4, .webm)</span>
-                      <div className="flex items-center gap-2">
-                        <a href="https://storyloop.com/site/freebies" target="_blank" rel="noreferrer" className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
-                          Story Loop <ExternalLink size={9} />
-                        </a>
-                        <Button size="sm" variant="outline" className="h-5 text-[9px] px-1.5 gap-1 bg-white/5 border-white/10" onClick={() => scriptureMotionInputRef.current?.click()}>
-                          <Upload size={9} /> Upload Loop
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[...customScriptureBgs.filter((a) => a.type === 'video'), ...SCRIPTURE_BACKGROUNDS.filter((a) => a.type === 'video')].map((asset) => (
-                        <div
-                          key={asset.id}
-                          className={`p-1.5 rounded-lg border cursor-pointer flex flex-col gap-1 transition-all ${scriptureBackground === asset.url ? 'border-primary bg-primary/10 shadow-[0_0_10px_rgba(0,242,254,0.25)]' : 'border-white/10 hover:border-white/20'
-                            }`}
-                          onClick={() => chooseScriptureBackground(asset)}
-                        >
-                          <div className="aspect-video rounded bg-black overflow-hidden relative">
-                            <video src={asset.url} className="w-full h-full object-cover" autoPlay loop muted />
-                          </div>
-                          <span className="text-[10px] font-bold truncate text-slate-200">{asset.title}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Scripture Stills Section */}
-                  <div className="flex flex-col gap-2 mt-2">
-                    <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
-                      <span className="flex items-center gap-1">🖼️ Still Backgrounds (Images)</span>
-                      <div className="flex items-center gap-2">
-                        <a href="https://www.churchmotiongraphics.com/free-worship-media/" target="_blank" rel="noreferrer" className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
-                          CMG Stills <ExternalLink size={9} />
-                        </a>
-                        <Button size="sm" variant="outline" className="h-5 text-[9px] px-1.5 gap-1 bg-white/5 border-white/10" onClick={() => scriptureStillInputRef.current?.click()}>
-                          <Upload size={9} /> Upload Still
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[...customScriptureBgs.filter((a) => a.type === 'image'), ...SCRIPTURE_BACKGROUNDS.filter((a) => a.type === 'image')].map((asset) => (
-                        <div
-                          key={asset.id}
-                          className={`p-1.5 rounded-lg border cursor-pointer flex flex-col gap-1 transition-all ${scriptureBackground === asset.url ? 'border-primary bg-primary/10 shadow-[0_0_10px_rgba(0,242,254,0.25)]' : 'border-white/10 hover:border-white/20'
-                            }`}
-                          onClick={() => chooseScriptureBackground(asset)}
-                        >
-                          <div className="aspect-video rounded bg-black overflow-hidden relative">
-                            <img src={asset.url} alt="" className="w-full h-full object-cover" />
-                          </div>
-                          <span className="text-[10px] font-bold truncate text-slate-200">{asset.title}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+              <div className="grid grid-cols-1 gap-6 overflow-y-auto pr-2 flex-1 scrollbar-thin">
 
                 {/* ==================== SONG / SERMON COLUMN ==================== */}
                 <div className="flex flex-col gap-4">
@@ -2535,6 +2520,20 @@ export function Studio() {
                 .catch(() => setSavedState('error'));
             }}
           />
+        )}
+
+        {deleteTargetSong && (
+          <div className="delete-confirm-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDeleteTargetSong(null); }}>
+            <section className="delete-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-song-title" aria-describedby="delete-song-description">
+              <span className="delete-confirm-kicker">LIBRARY ACTION</span>
+              <h2 id="delete-song-title">Delete {deleteTargetSong.kind === 'sermon' ? 'sermon' : 'song'}?</h2>
+              <p id="delete-song-description"><strong>{deleteTargetSong.title}</strong> will be removed from this device.</p>
+              <div className="delete-confirm-actions">
+                <Button variant="ghost" onClick={() => setDeleteTargetSong(null)}>Keep it</Button>
+                <Button variant="destructive" onClick={confirmDeleteSong}>Delete {deleteTargetSong.kind === 'sermon' ? 'sermon' : 'song'}</Button>
+              </div>
+            </section>
+          </div>
         )}
 
         <WorkflowModal open={workflow} onOpenChange={setWorkflow} />

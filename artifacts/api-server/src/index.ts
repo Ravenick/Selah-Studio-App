@@ -1,5 +1,13 @@
-import app from "./app";
+import path from "node:path";
 import { logger } from "./lib/logger";
+
+try {
+  process.loadEnvFile(path.resolve(process.cwd(), "../../.env"));
+} catch {
+  // Replit and production deployments provide environment variables directly.
+}
+
+const { default: app } = await import("./app");
 
 const rawPort = process.env["PORT"] ?? "3000";
 

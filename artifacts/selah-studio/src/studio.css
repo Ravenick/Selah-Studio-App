@@ -5341,3 +5341,369 @@ h1 {
     overflow: hidden;
   }
 }
+.font-bebas-neue {
+  font-family: 'Bebas Neue', sans-serif;
+}
+
+.font-montserrat {
+  font-family: 'Montserrat', sans-serif;
+}
+
+.song-screen .screen-copy p,
+.builder-slide-preview p {
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 700;
+  letter-spacing: -.015em;
+}
+
+.scripture-screen .screen-copy p {
+  color: var(--scripture-text-color, #fff);
+  font-family: var(--scripture-font, ui-monospace), monospace;
+  font-weight: 700;
+}
+
+.scripture-screen .scripture-verse sup,
+.scripture-screen .passage-tag {
+  color: var(--primary);
+}
+
+.song-screen .screen-copy {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 100%;
+  padding: 13% 10%;
+}
+
+.song-screen .screen-copy p {
+  width: 100%;
+  margin: 0;
+  text-align: center;
+  line-height: 1.38;
+}
+
+.song-screen .song-slide-heading {
+  position: absolute;
+  top: 7%;
+  left: 8%;
+  right: 8%;
+  margin: 0;
+  text-align: center;
+  line-height: 1;
+}
+
+.scripture-color-grid {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(20px, 1fr));
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid color-mix(in oklab, var(--border) 75%, transparent);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--surface) 78%, transparent);
+}
+
+.scripture-color-grid button {
+  width: 22px;
+  height: 22px;
+  border: 2px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+
+.scripture-color-grid button:hover { transform: scale(1.12); }
+.scripture-color-grid button.selected { border-color: white; box-shadow: 0 0 0 2px var(--primary), 0 0 14px color-mix(in oklab, var(--primary) 50%, transparent); }
+
+.builder-style-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 52px;
+  padding: 7px 24px;
+  border-block: 1px solid var(--border);
+  background: color-mix(in oklab, var(--surface) 94%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.builder-style-tabs button {
+  min-width: 100px;
+  height: 36px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-weight: 650;
+  cursor: pointer;
+  transition: color .16s ease, background .16s ease, border-color .16s ease;
+}
+
+.builder-style-tabs button:hover { color: var(--foreground); background: color-mix(in oklab, var(--primary) 7%, transparent); }
+.builder-style-tabs button.active { color: var(--foreground); background: color-mix(in oklab, var(--primary) 13%, var(--surface)); border-color: color-mix(in oklab, var(--primary) 40%, var(--border)); box-shadow: inset 0 -2px var(--primary); }
+.builder-style-tabs > span { margin-left: auto; color: var(--muted-foreground); font-size: 12px; }
+
+.theme-swatch.chosen { box-shadow: 0 0 10px color-mix(in oklab, var(--primary) 45%, transparent); }
+.swatch-teal.chosen { box-shadow: 0 0 12px oklch(0.805 0.143 177 / .62) !important; }
+.swatch-gold.chosen { box-shadow: 0 0 12px color-mix(in oklab, var(--gold) 62%, transparent) !important; }
+.swatch-purple.chosen { box-shadow: 0 0 12px color-mix(in oklab, var(--purple) 62%, transparent) !important; }
+
+.delete-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(4 8 14 / 72%);
+  backdrop-filter: blur(9px);
+}
+
+.delete-confirm-dialog {
+  width: min(420px, 100%);
+  padding: 26px;
+  border: 1px solid color-mix(in oklab, var(--primary) 24%, var(--border));
+  border-radius: 18px;
+  background: var(--modal-glass);
+  box-shadow: 0 24px 90px rgb(0 0 0 / 48%);
+}
+
+.delete-confirm-kicker { color: var(--primary); font-size: 10px; font-weight: 800; letter-spacing: .15em; }
+.delete-confirm-dialog h2 { margin: 10px 0 7px; font-size: 21px; }
+.delete-confirm-dialog p { color: var(--muted-foreground); font-size: 13px; line-height: 1.55; }
+.delete-confirm-dialog p strong { color: var(--foreground); }
+.delete-confirm-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 22px; }
+
+.style-preview-screen { min-height: 260px; }
+.style-preview-screen > video { filter: brightness(.62) saturate(.75); }
+.style-preview-screen > div { position: relative; z-index: 1; }
+.bg-thumb-wrap video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.bible-version-switcher {
+  display: flex;
+  gap: 5px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in oklab, var(--surface) 85%, transparent);
+}
+
+.bible-version-button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 10px;
+  font-weight: 650;
+  transition: color .15s, background .15s, border-color .15s;
+}
+
+.bible-version-button:hover {
+  color: var(--foreground);
+  background: var(--surface-raised);
+}
+
+.bible-version-button.active {
+  color: var(--primary-foreground);
+  background: var(--primary);
+  border-color: color-mix(in oklab, var(--primary) 72%, white);
+  box-shadow: 0 0 12px color-mix(in oklab, var(--primary) 25%, transparent);
+}
+
+.bible-version-button small {
+  font-size: 6px;
+  letter-spacing: .06em;
+  opacity: .75;
+}
+
+.scripture-appearance-panel {
+  margin: 7px 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--surface) 75%, transparent);
+}
+
+.scripture-appearance-panel summary {
+  color: var(--muted-foreground);
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.scripture-appearance-controls {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  align-items: end;
+  gap: 9px;
+  padding-top: 10px;
+}
+
+.scripture-appearance-controls label,
+.editor-style-field,
+.header-color-field {
+  display: grid;
+  gap: 5px;
+  color: var(--muted-foreground);
+  font-size: 9px;
+}
+
+.scripture-appearance-controls select {
+  min-width: 0;
+  height: 29px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--foreground);
+  font-size: 10px;
+}
+
+.scripture-appearance-controls input[type="color"] {
+  width: 100%;
+  height: 29px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+}
+
+.scripture-appearance-error {
+  margin: 6px 0;
+  color: var(--destructive);
+  font-size: 10px;
+}
+
+.editor-view-tabs {
+  display: flex;
+  gap: 5px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.editor-view-tabs button {
+  min-height: 28px;
+  gap: 6px;
+  padding: 0 10px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+
+.editor-view-tabs button.active {
+  color: var(--primary);
+  background: color-mix(in oklab, var(--primary) 10%, transparent);
+}
+
+.editor-style-panel {
+  display: grid;
+  gap: 11px;
+  min-height: 194px;
+  padding: 12px 3px;
+}
+
+.editor-style-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--foreground);
+  font-size: 10px;
+}
+
+.editor-style-heading span:last-child {
+  color: var(--muted-foreground);
+  font-size: 9px;
+  font-weight: 400;
+}
+
+.editor-font-select {
+  width: 100%;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--foreground);
+}
+
+.editor-style-field input[type="range"] {
+  width: 100%;
+  accent-color: var(--primary);
+}
+
+.editor-color-grid,
+.header-color-grid {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(14px, 1fr));
+  gap: 5px;
+}
+
+.editor-color-dot,
+.header-color-grid button {
+  width: 19px;
+  height: 19px;
+  padding: 0;
+  border: 1px solid color-mix(in oklab, var(--foreground) 20%, transparent);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform .12s, outline-color .12s;
+}
+
+.editor-color-dot:hover,
+.header-color-grid button:hover {
+  transform: scale(1.12);
+}
+
+.editor-color-dot.selected,
+.header-color-grid button.selected {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.header-color-grid {
+  grid-template-columns: repeat(9, 19px);
+  padding-top: 3px;
+}
+
+.header-style-controls {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@font-face {
+  font-family: 'Bebas Neue';
+  src: url('/fonts/BebasNeue-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  src: url('/fonts/Montserrat-Variable.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@media (max-width: 640px) {
+  .scripture-appearance-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .scripture-appearance-controls label:first-child {
+    grid-column: 1 / -1;
+  }
+}

@@ -49,6 +49,20 @@ class SelahWorkspace extends Dexie {
 export const workspaceDb = new SelahWorkspace();
 const recordId = (song: Song) => `${song.kind === 'sermon' ? 'sermon' : 'song'}:${song.title.toLocaleLowerCase()}`;
 
+function createAssetId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+    bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
 export async function readSavedSongs() {
   const [songs, sermons] = await Promise.all([workspaceDb.songs.toArray(), workspaceDb.sermons.toArray()]);
   return [...songs, ...sermons].map(({ id: _id, ...song }) => song);
@@ -101,7 +115,7 @@ export async function stashBackground(file: File): Promise<StoredBackground> {
     throw new Error('Choose an image, GIF, MP4, MOV, or WebM file.');
   }
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
-  const id = crypto.randomUUID();
+  const id = createAssetId();
   const item: StoredBackground = { id, name: file.name, mimeType: file.type, type: isVideo ? 'video' : 'image' };
   if (isTauri()) {
     const fs = await import('@tauri-apps/plugin-fs');

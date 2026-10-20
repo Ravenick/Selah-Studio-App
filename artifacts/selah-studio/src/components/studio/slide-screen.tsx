@@ -3,6 +3,7 @@ import { cloneElement, isValidElement, useEffect, useState, type ReactNode, type
 import { getBackgroundBlob } from '@/lib/local-workspace';
 import type { Slide } from '@/lib/studio-data';
 import { FormattedText } from './formatted-text';
+import { useScriptureAppearance } from '@/lib/scripture-appearance';
 
 const mountain = { url: '/selah-atmosphere.svg' };
 const logo = { url: '/selah-logo.png' };
@@ -189,9 +190,16 @@ export function SlideScreen({
   const [resolvedBackground, setResolvedBackground] = useState('');
 
   const [resolvedMedia, setResolvedMedia] = useState('');
+  const scriptureAppearance = useScriptureAppearance();
   const audioMuted = slide.audioMuted ?? true;
-  const headerColors = { white: 'var(--screen-text)', teal: 'var(--primary)', gold: 'var(--gold)', rose: '#fb7185' };
-  const headerFonts = { 'font-dm': 'inherit', 'font-georgia': 'Georgia, serif', 'font-mono': 'ui-monospace, monospace' };
+  const headerColors: Record<string, string> = { white: 'var(--screen-text)', teal: 'var(--primary)', gold: 'var(--gold)', rose: '#fb7185' };
+  const headerFonts: Record<string, string> = {
+    'font-dm': 'inherit',
+    'font-georgia': 'Georgia, serif',
+    'font-mono': 'ui-monospace, monospace',
+    'font-bebas-neue': 'Bebas Neue, sans-serif',
+    'font-montserrat': 'Montserrat, sans-serif',
+  };
 
   useEffect(() => {
     let alive = true;
@@ -241,14 +249,16 @@ export function SlideScreen({
     frame.contentWindow.postMessage(JSON.stringify({ event: 'command', func: audioMuted ? 'mute' : 'unMute', args: [] }), '*');
   }, [audioMuted, resolvedMedia, slide.id, slide.mediaType]);
 
-  const background = resolvedBackground || slide.background || (slide.kind === 'scripture' ? '/backgrounds/stills/Echo Spheres Party - 16x9.jpg' : undefined);
+  const background = slide.kind === 'scripture'
+    ? '/backgrounds/stills/Echo Spheres Party - 16x9.jpg'
+    : resolvedBackground || slide.background;
   const hasBackground = Boolean(background && !isLocalAsset(background));
-  const isBackgroundVideo = slide.backgroundType === 'video' || Boolean(background && /\.(mp4|webm|mov)(\?|$)/i.test(background));
+  const isBackgroundVideo = slide.kind !== 'scripture' && (slide.backgroundType === 'video' || Boolean(background && /\.(mp4|webm|mov)(\?|$)/i.test(background)));
   const isStandaloneMedia = slide.kind === 'media' && Boolean(slide.mediaUrl);
   const youtubeEmbed = slide.mediaType === 'youtube' && resolvedMedia ? youtubeUrlForEmbed(resolvedMedia) : '';
 
   return (
-    <div className={`slide-screen ${slide.kind === 'scripture' ? 'scripture-screen' : ''} ${slide.background?.startsWith('scripture-') ? slide.background : ''} ${slide.verses ? 'compiled-scripture' : ''} ${slide.chorus ? 'chorus-screen' : ''} ${mode === 'blackout' ? 'screen-blackout' : ''} ${isStandaloneMedia ? 'standalone-media-screen' : ''} ${className}`}>
+    <div className={`slide-screen ${slide.kind === 'scripture' ? 'scripture-screen' : ''} ${slide.kind === 'song' || slide.kind === 'sermon' ? 'song-screen' : ''} ${slide.verses ? 'compiled-scripture' : ''} ${slide.chorus ? 'chorus-screen' : ''} ${mode === 'blackout' ? 'screen-blackout' : ''} ${isStandaloneMedia ? 'standalone-media-screen' : ''} ${className}`} style={{ '--scripture-font': headerFonts[scriptureAppearance.font] ?? 'ui-monospace, monospace', '--scripture-text-color': scriptureAppearance.textColor } as React.CSSProperties}>
       <style>{transitionStyles}</style>
       {mode !== 'blackout' && isStandaloneMedia && (
         <div className="standalone-media-stage">
@@ -271,7 +281,7 @@ export function SlideScreen({
           )}
         </div>
       )}
-      {!isStandaloneMedia && (slide.kind !== 'scripture' || (slide.background && slide.background !== 'scripture-obsidian')) && mode !== 'blackout' && (
+      {!isStandaloneMedia && mode !== 'blackout' && (
         <>
           {isBackgroundVideo && hasBackground ? (
             <video src={background} className="screen-background" autoPlay muted loop playsInline />
@@ -291,8 +301,8 @@ export function SlideScreen({
             <strong
               className="song-slide-heading"
               style={{
-                color: headerColors[slide.headingStyle?.color ?? 'white'],
-                fontFamily: headerFonts[slide.headingStyle?.font ?? 'font-dm'],
+                color: headerColors[slide.headingStyle?.color ?? 'white'] ?? slide.headingStyle?.color ?? 'var(--screen-text)',
+                fontFamily: headerFonts[slide.headingStyle?.font ?? 'font-montserrat'],
                 fontWeight: Number(slide.headingStyle?.weight ?? '600'),
                 fontSize: `${(3.3 * (slide.headingStyle?.size ?? 100)) / 100}cqw`,
               }}

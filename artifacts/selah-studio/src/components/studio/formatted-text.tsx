@@ -5,6 +5,7 @@ export function FormattedText({ text, formats = [] }: { text: string; formats?: 
   return <>{boundaries.slice(0,-1).map((start, i) => {
     const end = boundaries[i+1] ?? text.length;
     const format = formats.filter(f => f.start <= start && f.end >= end).reduce<Partial<TextFormat>>((result,item) => ({...result,...item}),{});
-    return <span key={start} className={`formatted-run ${format?.color ?? ''} ${format?.font ?? ''}`} style={{ ...(format?.size ? { fontSize: `${format.size}%` } : {}), ...(format?.bold ? { fontWeight: 700 } : {}) }}>{text.slice(start,end)}</span>;
+    const color = format.color?.startsWith('#') ? format.color : undefined;
+    return <span key={start} className={`formatted-run ${color ? '' : format.color ?? ''} ${format.font ?? ''}`} style={{ ...(color ? { color } : {}), ...(format.size ? { fontSize: `${format.size}%` } : {}), ...(format?.bold ? { fontWeight: 700 } : {}) }}>{text.slice(start,end)}</span>;
   })}</>;
 }

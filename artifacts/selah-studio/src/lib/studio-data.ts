@@ -1,6 +1,6 @@
 import { sectionHeadings } from './studio-workflows';
 import type { TextFormat } from './presentation';
-export type HeaderStyle = { weight: '400' | '500' | '600' | '700'; size: number; color: 'white' | 'teal' | 'gold' | 'rose'; font: 'font-dm' | 'font-georgia' | 'font-mono' };
+export type HeaderStyle = { weight: '400' | '500' | '600' | '700'; size: number; color: string; font: string };
 export type Slide = { id: string; text: string; label: string; kind: 'song' | 'scripture' | 'media' | 'sermon'; title: string; background?: string; backgroundType?: 'image' | 'video'; heading?: string; headingStyle?: HeaderStyle; chorus?: boolean; verses?: { number: number; text: string }[]; formats?: TextFormat[]; mediaUrl?: string; mediaType?: 'image' | 'video' | 'youtube'; audioMuted?: boolean; youtubeUrl?: string };
 export type Song = { title: string; author: string; tag: string; lyrics: string[]; kind?: 'song' | 'sermon'; sections?: { text: string; chorus: boolean; formats?: TextFormat[] | undefined }[]; background?: string | undefined; backgroundType?: 'image' | 'video' | undefined; headerStyle?: HeaderStyle | undefined; sermonText?: string | undefined; slideBreaks?: number[] | undefined };
 export const songs: Song[] = [
