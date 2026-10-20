@@ -113,12 +113,13 @@ function wrapWordsWithBlur(
 
   // Handle React elements (e.g. <p>, <strong>, <sup>, <FormattedText>)
   if (React.isValidElement(node)) {
+    const element = node as ReactElement<any>;
     const children = (node.props as any)?.children;
     if (!children) return node;
 
     return React.cloneElement(
-      node,
-      node.props,
+      element,
+      element.props,
       wrapWordsWithBlur(children, counter, staggerMs)
     );
   }

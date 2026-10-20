@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, Film, Image as ImageIcon, Sparkles, Upload, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getBackgroundBlob, readBackgrounds, readScriptureTheme, saveScriptureTheme, stashBackground, type StoredBackground } from '@/lib/local-workspace';
+import { motionLoops, stillScenes } from '@/lib/media-library-presets';
 
 const mountain = { url: '/selah-atmosphere.svg' };
 type BackgroundAsset = Omit<StoredBackground, 'blob' | 'path'> & { url: string };
@@ -52,7 +53,6 @@ export function BackgroundPicker({
   }, []);
 
   function choose(url: string, type: 'image' | 'video', id: string) {
-    const nextVal = id.startsWith('scripture-') || id.startsWith('http') ? id : `local-background:${id}`;
     onChoose(url, type, id);
     if (presets) {
       void saveScriptureTheme(id).catch(() => setStatus('Preference could not be saved.'));

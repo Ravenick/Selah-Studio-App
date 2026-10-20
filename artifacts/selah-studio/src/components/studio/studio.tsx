@@ -1815,7 +1815,7 @@ export function Studio() {
                         setChapter(val);
                       }}
                       onKeyDown={(e) => {
-                        if (['Enter', 'Tab', 'ArrowRight'].includes(event.key)) {
+                        if (['Enter', 'Tab', 'ArrowRight'].includes(e.key)) {
                           e.preventDefault();
                           if (!chapter || chapter === '0') setChapter('1');
                           verseInput.current?.focus();
@@ -2097,7 +2097,9 @@ export function Studio() {
                   return (
                     <div
                       key={slideItem.id || `media-deck-${index}`}
-                      ref={(el) => (deckCardsRef.current[index] = el)}
+                      ref={(el) => {
+                        deckCardsRef.current[index] = el;
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
                         setActiveFocus('deck');
