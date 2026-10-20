@@ -48,6 +48,9 @@ import {
   Upload,
   X,
   RotateCcw,
+  Volume2,
+  VolumeX,
+  Link2,
 } from 'lucide-react';
 import { Button, type ButtonProps } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -132,7 +135,7 @@ function SectionLabel({ children, icon }: { children: ReactNode; icon?: ReactNod
 }
 
 const defaultSong: Song = songs[0] ?? { title: 'Amazing Grace', author: 'John Newton', tag: 'Hymn', lyrics: [] };
-const defaultSlide: Slide = songSlides(defaultSong)[0] ?? welcomeSlide;
+const defaultSlide: Slide = { ...(songSlides(defaultSong)[0] ?? welcomeSlide), background: '/backgrounds/motion/Blue Particles.mp4', backgroundType: 'video' };
 const psalmVerses = chapters['Psalms']?.verses ?? [];
 const accents: [string, string][] = [
   ['teal', 'Neon Teal'],
@@ -207,12 +210,14 @@ export function Studio() {
   const scriptureStillInputRef = useRef<HTMLInputElement>(null);
   const mediaMotionInputRef = useRef<HTMLInputElement>(null);
   const mediaStillInputRef = useRef<HTMLInputElement>(null);
+  const standaloneMediaInputRef = useRef<HTMLInputElement>(null);
+  const [youtubeMediaUrl, setYoutubeMediaUrl] = useState('');
   // Custom uploaded backgrounds state
   const [customScriptureBgs, setCustomScriptureBgs] = useState<MediaAsset[]>([]);
   const [customMediaBgs, setCustomMediaBgs] = useState<MediaAsset[]>([]);
   // Media Explorer Modal State
   const [isMediaExplorerOpen, setIsMediaExplorerOpen] = useState(false);
-  const [mediaBackground, setMediaBackground] = useState('/backgrounds/motion/blue-particles.mp4');
+  const [mediaBackground, setMediaBackground] = useState('/backgrounds/motion/Blue Particles.mp4');
   const [mediaBackgroundType, setMediaBackgroundType] = useState<'image' | 'video'>('video');
   // Handle Custom Uploads for Scripture
   function handleUploadScriptureAsset(e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') {
@@ -250,6 +255,123 @@ export function Studio() {
     setCustomMediaBgs((prev) => [newAsset, ...prev]);
     chooseMediaBackground(newAsset);
     setNotice(`Uploaded custom song/sermon ${type === 'video' ? 'motion loop' : 'still'}.`);
+  }
+
+  // Standalone media is a deck item, not a background applied behind lyrics.
+  async function handleStandaloneMediaUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 200 * 1024 * 1024) {
+      setNotice('Media files must be 200 MB or smaller.');
+      return;
+    }
+    const isVideo = file.type.startsWith('video/');
+    if (!file.type.startsWith('image/') && !isVideo) {
+      setNotice('Choose an image, GIF, MP4, MOV, or WebM file.');
+      return;
+    }
+    try {
+      const stored = await stashBackground(file);
+      const mediaSlide: Slide = {
+        id: `media-${stored.id}`,
+        title: file.name.replace(/\.[^/.]+$/, ''),
+        label: isVideo ? 'Video' : 'Image',
+        text: '',
+        kind: 'media',
+        mediaUrl: `local-background:${stored.id}`,
+        mediaType: isVideo ? 'video' : 'image',
+        audioMuted: true,
+      };
+      const mediaOnlyDeck = mediaDeckSlides.filter((item) => item.kind === 'media' && Boolean(item.mediaUrl));
+      const nextDeck = [...mediaOnlyDeck, mediaSlide];
+      const itemIndex = nextDeck.length - 1;
+      setSlides(nextDeck);
+      setMediaDeckSlides(nextDeck);
+      setSelected(itemIndex);
+      setSelectedMediaDeckIdx(itemIndex);
+      loadPreview(mediaSlide);
+      if (autoPush) broadcast(mediaSlide);
+      setIsDirty(true);
+      setNotice(`Added ${isVideo ? 'video' : 'image'} to the presentation deck.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not save this media file.');
+    }
+  }
+
+  function youtubeEmbedUrl(input: string): string | null {
+    try {
+      const parsed = new URL(input.trim());
+      let id = '';
+      if (parsed.hostname === 'youtu.be' || parsed.hostname.endsWith('.youtu.be')) id = parsed.pathname.split('/').filter(Boolean)[0] || '';
+      else if (parsed.hostname.includes('youtube.com') || parsed.hostname.includes('youtube-nocookie.com')) {
+        if (parsed.pathname === '/watch') id = parsed.searchParams.get('v') || '';
+        else if (/^\/(embed|shorts|live)\//.test(parsed.pathname)) id = parsed.pathname.split('/')[2] || '';
+      }
+      if (!/^[A-Za-z0-9_-]{11}$/.test(id)) return null;
+      return `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}`;
+    } catch {
+      return null;
+    }
+  }
+
+  function toggleSelectedMediaAudio() {
+    const index = selectedMediaDeckIdx ?? selected;
+    const current = mediaDeckSlides[index];
+    if (!current || !current.mediaUrl || (current.mediaType !== 'video' && current.mediaType !== 'youtube')) return;
+    const updated = { ...current, audioMuted: !(current.audioMuted ?? true) };
+    setSlides((prev) => prev.map((item) => item.id === updated.id ? updated : item));
+    setMediaDeckSlides((prev) => prev.map((item) => item.id === updated.id ? updated : item));
+    loadPreview(updated);
+    if (autoPush || output.slide.id === current.id) broadcast(updated);
+    setIsDirty(true);
+  }
+
+  function removeDeckMedia(index: number) {
+    const item = mediaDeckSlides[index];
+    if (!item || item.kind !== 'media' || !item.mediaUrl) return;
+    const nextDeck = mediaDeckSlides.filter((_, i) => i !== index);
+    const nextSlides = slides.filter((slide) => slide.id !== item.id);
+    setMediaDeckSlides(nextDeck);
+    setSlides(nextSlides);
+    const nextIndex = Math.max(0, Math.min(index, nextDeck.length - 1));
+    setSelectedMediaDeckIdx(nextDeck.length ? nextIndex : null);
+    setSelected(nextIndex);
+    if (nextDeck[nextIndex]) loadPreview(nextDeck[nextIndex]);
+    setEditingSlideIdx(null);
+    setIsDirty(true);
+    setNotice(`Removed “${item.title}” from the presentation deck. The saved asset remains in local storage.`);
+  }
+
+  function addYoutubeMedia() {
+    const embedUrl = youtubeEmbedUrl(youtubeMediaUrl);
+    if (!embedUrl) {
+      setNotice('Paste a valid YouTube video, Shorts, or live URL.');
+      return;
+    }
+    const mediaSlide: Slide = {
+      id: `youtube-${Date.now()}`,
+      title: 'YouTube video',
+      label: 'YouTube',
+      text: '',
+      kind: 'media',
+      mediaUrl: embedUrl,
+      mediaType: 'youtube',
+      youtubeUrl: youtubeMediaUrl.trim(),
+      audioMuted: true,
+    };
+    const mediaOnlyDeck = mediaDeckSlides.filter((item) => item.kind === 'media' && Boolean(item.mediaUrl));
+    const nextDeck = [...mediaOnlyDeck, mediaSlide];
+    const itemIndex = nextDeck.length - 1;
+    setSlides(nextDeck);
+    setMediaDeckSlides(nextDeck);
+    setSelected(itemIndex);
+    setSelectedMediaDeckIdx(itemIndex);
+    loadPreview(mediaSlide);
+    if (autoPush) broadcast(mediaSlide);
+    setYoutubeMediaUrl('');
+    setIsDirty(true);
+    setNotice('YouTube media added to the presentation deck.');
   }
   const [builderOpen, setBuilderOpen] = useState(false);
   const [autoPush, setAutoPush] = useState(false);
@@ -295,6 +417,8 @@ export function Studio() {
       song,
       scriptureBackground,
       mediaBackground,
+      mediaBackgroundType,
+      scriptureBackgroundType,
     };
 
     const jsonString = JSON.stringify(payload, null, 2);
@@ -340,6 +464,9 @@ export function Studio() {
     if (payload.mediaDeckSlides) setMediaDeckSlides(payload.mediaDeckSlides);
     if (payload.song) setSong(payload.song);
     if (payload.scriptureBackground) setScriptureBackground(payload.scriptureBackground);
+    if (payload.mediaBackground) setMediaBackground(payload.mediaBackground);
+    if (payload.mediaBackgroundType) setMediaBackgroundType(payload.mediaBackgroundType);
+    if (payload.scriptureBackgroundType) setScriptureBackgroundType(payload.scriptureBackgroundType);
     if (payload.name) setCurrentScheduleName(payload.name);
 
     setSelected(0);
@@ -411,11 +538,11 @@ export function Studio() {
   const [tab, setTab] = useState('Songs');
   const [search, setSearch] = useState('');
   const [song, setSong] = useState<Song>(defaultSong);
-  const [slides, setSlides] = useState<Slide[]>(songSlides(defaultSong));
+  const [slides, setSlides] = useState<Slide[]>(songSlides(defaultSong).map((slide) => ({ ...slide, background: '/backgrounds/motion/Blue Particles.mp4', backgroundType: 'video' })));
   const [selected, setSelected] = useState(0);
 
   // Dedicated Media Presentation Deck states
-  const [mediaDeckSlides, setMediaDeckSlides] = useState<Slide[]>(songSlides(defaultSong));
+  const [mediaDeckSlides, setMediaDeckSlides] = useState<Slide[]>(songSlides(defaultSong).map((slide) => ({ ...slide, background: '/backgrounds/motion/Blue Particles.mp4', backgroundType: 'video' })));
   const [selectedMediaDeckIdx, setSelectedMediaDeckIdx] = useState<number | null>(0);
   const [output, setOutput] = useState<OutputState>(() => {
     try {
@@ -458,7 +585,7 @@ export function Studio() {
     setVoiceFeedback({ transcript: text, parsed });
   });
   const listening = voice.listening;
-  const activeSlide = slides[selected] || slides[0] || welcomeSlide;
+  const activeSlide = mediaDeckSlides[selectedMediaDeckIdx ?? selected] || slides[selected] || slides[0] || welcomeSlide;
   const bookMatches = matchingBooks(book);
 
   // Take slide live directly
@@ -744,9 +871,12 @@ export function Studio() {
           displayHighlightedVerses(autoPush);
           return;
         }
-        if (slides[selected]) {
-          broadcast(slides[selected]!);
-          setNotice(`Projected ${slides[selected]!.title || 'Slide'} Live`);
+        const deckIndex = selectedMediaDeckIdx ?? selected;
+        const selectedItem = mediaDeckSlides[deckIndex] ?? slides[selected];
+        if (selectedItem) {
+          loadPreview(selectedItem);
+          if (autoPush) broadcast(selectedItem);
+          setNotice(autoPush ? `Projected ${selectedItem.title || 'Slide'} Live` : `Loaded ${selectedItem.title || 'Slide'} into Preview`);
         }
         return;
       }
@@ -1037,6 +1167,9 @@ export function Studio() {
           : s
       )
     );
+    setOutput((current) => current.slide.kind === 'scripture'
+      ? { ...current, slide: { ...current.slide, background: asset.url, backgroundType: asset.type } }
+      : current);
 
     if (slides[selected]?.kind === 'scripture') {
       const updated = { ...slides[selected], background: asset.url, backgroundType: asset.type };
@@ -1048,36 +1181,6 @@ export function Studio() {
     setNotice('Scripture background updated as active constant.');
   }
 
-  // Persistent Song / Sermon Background Chooser
-  function chooseMediaBackground(asset: MediaAsset) {
-    setMediaBackground(asset.url);
-    setMediaBackgroundType(asset.type);
-
-    setSlides((prev) =>
-      prev.map((s) =>
-        s.kind !== 'scripture'
-          ? { ...s, background: asset.url, backgroundType: asset.type }
-          : s
-      )
-    );
-    setMediaDeckSlides((prev) =>
-      prev.map((s) =>
-        s.kind !== 'scripture'
-          ? { ...s, background: asset.url, backgroundType: asset.type }
-          : s
-      )
-    );
-
-    if (slides[selected] && slides[selected].kind !== 'scripture') {
-      const updated = { ...slides[selected], background: asset.url, backgroundType: asset.type };
-      loadPreview(updated);
-      if (autoPush) broadcast(updated);
-    }
-
-    setIsDirty(true);
-    setNotice('Song/Sermon background updated as active constant.');
-  }
-
   // Set Song / Sermon Background
   function chooseMediaBackground(asset: MediaAsset) {
     setMediaBackground(asset.url);
@@ -1086,18 +1189,21 @@ export function Studio() {
     // Dynamically re-bind active song/sermon slides with this background
     setSlides((prev) =>
       prev.map((slide) =>
-        slide.kind !== 'scripture'
+        slide.kind === 'song' || slide.kind === 'sermon'
           ? { ...slide, background: asset.url, backgroundType: asset.type }
           : slide
       )
     );
     setMediaDeckSlides((prev) =>
       prev.map((slide) =>
-        slide.kind !== 'scripture'
+        slide.kind === 'song' || slide.kind === 'sermon'
           ? { ...slide, background: asset.url, backgroundType: asset.type }
           : slide
       )
     );
+    setOutput((current) => current.slide.kind === 'song' || current.slide.kind === 'sermon'
+      ? { ...current, slide: { ...current.slide, background: asset.url, backgroundType: asset.type } }
+      : current);
     setIsDirty(true);
   }
 
@@ -1814,6 +1920,7 @@ export function Studio() {
                               key={item.verseNumber}
                               type="button"
                               className={`sequence-verse-row ${isHighlighted ? 'highlighted' : ''}`}
+                              aria-pressed={isHighlighted}
                               onClick={() => toggleSequenceVerse(item.verseNumber)}
                             >
                               <span className="sequence-verse-badge">v{item.verseNumber}</span>
@@ -1862,6 +1969,30 @@ export function Studio() {
 
               {tab === 'Media' && (
                 <div className="flex flex-col gap-3">
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex flex-col gap-2">
+                    <SectionLabel icon={<ImageIcon size={14} />}>ADD STANDALONE MEDIA</SectionLabel>
+                    <p className="text-[11px] text-slate-400">Images and videos become their own deck slides. Video uploads are limited to 200 MB.</p>
+                    <input ref={standaloneMediaInputRef} type="file" accept="image/*,video/mp4,video/quicktime,video/webm" className="hidden" onChange={handleStandaloneMediaUpload} />
+                    <Button className="w-full h-9 bg-primary text-black font-bold text-xs" onClick={() => standaloneMediaInputRef.current?.click()}>
+                      <Upload size={14} className="mr-1.5" /> Upload Image or Video
+                    </Button>
+                    <div className="flex gap-2">
+                      <input aria-label="YouTube URL" value={youtubeMediaUrl} onChange={(e) => setYoutubeMediaUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addYoutubeMedia(); } }} placeholder="Paste YouTube / live URL" className="min-w-0 flex-1 h-9 rounded-md border border-white/15 bg-black/40 px-2 text-xs text-white outline-none focus:border-primary" />
+                      <Button aria-label="Add YouTube media" title="Add YouTube media" className="h-9 px-3" onClick={addYoutubeMedia}><Link2 size={14} /></Button>
+                    </div>
+                    <div className="text-[10px] text-slate-400">{mediaDeckSlides.filter((item) => item.kind === 'media' && item.mediaUrl).length} standalone media item(s) in deck</div>
+                    <Button variant="outline" className="w-full h-9 text-xs" onClick={() => setIsMediaExplorerOpen(true)}>
+                      <ImageIcon size={14} className="mr-1.5" /> Choose Local Stills & Motion Loops
+                    </Button>
+                    {(() => {
+                      const selectedMedia = mediaDeckSlides[selectedMediaDeckIdx ?? selected]; return selectedMedia?.mediaUrl && (selectedMedia.mediaType === 'video' || selectedMedia.mediaType === 'youtube') ? (
+                        <Button variant="outline" className="w-full h-8 text-xs" onClick={toggleSelectedMediaAudio}>
+                          {(selectedMedia.audioMuted ?? true) ? <VolumeX size={14} className="mr-1.5" /> : <Volume2 size={14} className="mr-1.5" />}
+                          {(selectedMedia.audioMuted ?? true) ? 'Unmute selected media' : 'Mute selected media'}
+                        </Button>
+                      ) : null;
+                    })()}
+                  </div>
                   {/* Scripture Active Background Card */}
                   <div className="p-2.5 rounded-lg bg-white/5 border border-white/10 flex flex-col gap-1.5">
                     <span className="text-[10px] font-bold text-primary uppercase">Active Scripture Background</span>
@@ -1902,13 +2033,7 @@ export function Studio() {
                     </div>
                   </div>
 
-                  {/* Modal Explorer Trigger */}
-                  <Button
-                    className="w-full h-9 bg-primary text-black font-bold text-xs gap-1.5 mt-1"
-                    onClick={() => setIsMediaExplorerOpen(true)}
-                  >
-                    <ImageIcon size={14} /> Explore & Select Backgrounds
-                  </Button>
+
                 </div>
               )}
 
@@ -1952,7 +2077,7 @@ export function Studio() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-bold text-primary tracking-wider uppercase">
-                    Presentation Deck · {song?.title || 'Amazing Grace'}
+                    Presentation Deck · {(mediaDeckSlides[selectedMediaDeckIdx ?? selected]?.title) || (mediaDeckSlides.length ? 'Presentation' : 'No items loaded')}
                   </span>
                   {activeFocus === 'deck' && (
                     <span className="text-[9px] font-bold bg-primary/20 text-primary px-1.5 py-0.5 rounded uppercase tracking-wider">
@@ -2011,7 +2136,7 @@ export function Studio() {
                         if (autoPush) broadcast(slideItem);
                       }}
                       className={`flex-none w-44 aspect-video rounded-md p-2 border cursor-pointer flex flex-col justify-between transition-all relative group ${isCurrentActive
-                        ? 'bg-primary/10 border-primary shadow-[0_0_10px_rgba(0,242,254,0.25)] text-white'
+                        ? 'bg-cyan-300/20 border-cyan-200 ring-2 ring-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.38)] text-white'
                         : 'bg-white/5 border-white/10 hover:bg-white/10 text-slate-300'
                         }`}
                     >
@@ -2020,8 +2145,13 @@ export function Studio() {
                           {slideItem.label || `Verse ${index + 1}`}
                         </span>
 
+                        {slideItem.kind === 'media' && slideItem.mediaUrl && (
+                          <button type="button" aria-label={`Remove ${slideItem.title} from deck`} title="Remove from deck" className="text-white/70 hover:text-white hover:bg-rose-500/80 rounded p-1" onClick={(e) => { e.stopPropagation(); removeDeckMedia(index); }}>
+                            <X size={12} />
+                          </button>
+                        )}
                         {/* Inline Edit Trigger (Disabled on Scripture) */}
-                        {!isScripture && (
+                        {!isScripture && slideItem.kind !== 'media' && (
                           <button
                             type="button"
                             className="text-[9px] px-1.5 py-0.5 rounded bg-white/10 hover:bg-primary hover:text-black text-slate-300 transition-colors opacity-80 group-hover:opacity-100"
@@ -2089,7 +2219,7 @@ export function Studio() {
                     <Layers size={13} className="text-primary" />
                     <span>PREVIEW MONITOR</span>
                     <small className="text-slate-400 font-normal">
-                      ({slides.length ? selected + 1 : 0}/{slides.length})
+                      ({mediaDeckSlides.length ? (selectedMediaDeckIdx ?? selected) + 1 : 0}/{mediaDeckSlides.length})
                     </small>
                   </h3>
                   {activeFocus === 'preview' && (
@@ -2099,7 +2229,7 @@ export function Studio() {
                   )}
                 </div>
 
-                <div className="monitor-screen-wrap flex-1 flex items-center justify-center bg-black/60 rounded-md overflow-hidden p-1 max-h-[220px]">
+                <div className="monitor-screen-wrap flex-1 flex items-center justify-center bg-black/60 rounded-md overflow-hidden p-1">
                   <SlideScreen slide={activeSlide} />
                 </div>
 
@@ -2109,8 +2239,8 @@ export function Studio() {
                       variant="outline"
                       size="sm"
                       className="h-6 text-[11px] px-2"
-                      disabled={selected <= 0}
-                      onClick={() => stepPreview(-1)}
+                      disabled={(selectedMediaDeckIdx ?? selected) <= 0}
+                      onClick={() => stepDeck(-1)}
                     >
                       <ArrowLeft size={11} className="mr-1" /> Prev
                     </Button>
@@ -2118,8 +2248,8 @@ export function Studio() {
                       variant="outline"
                       size="sm"
                       className="h-6 text-[11px] px-2"
-                      disabled={selected >= slides.length - 1}
-                      onClick={() => stepPreview(1)}
+                      disabled={(selectedMediaDeckIdx ?? selected) >= mediaDeckSlides.length - 1}
+                      onClick={() => stepDeck(1)}
                     >
                       Next <ArrowRight size={11} className="ml-1" />
                     </Button>
@@ -2164,7 +2294,7 @@ export function Studio() {
                   </div>
                 </div>
 
-                <div className="monitor-screen-wrap flex-1 flex items-center justify-center bg-black/60 rounded-md overflow-hidden p-1 max-h-[220px]">
+                <div className="monitor-screen-wrap flex-1 flex items-center justify-center bg-black/60 rounded-md overflow-hidden p-1">
                   <SlideScreen slide={output.slide} mode={output.mode} />
                 </div>
 
@@ -2174,8 +2304,8 @@ export function Studio() {
                       variant="outline"
                       size="sm"
                       className="h-6 text-[11px] px-2"
-                      disabled={selected <= 0}
-                      onClick={() => stepLive(-1)}
+                      disabled={(selectedMediaDeckIdx ?? selected) <= 0}
+                      onClick={() => stepDeck(-1)}
                     >
                       <ArrowLeft size={11} className="mr-1" /> Prev Live
                     </Button>
@@ -2183,8 +2313,8 @@ export function Studio() {
                       variant="outline"
                       size="sm"
                       className="h-6 text-[11px] px-2"
-                      disabled={selected >= slides.length - 1}
-                      onClick={() => stepLive(1)}
+                      disabled={(selectedMediaDeckIdx ?? selected) >= mediaDeckSlides.length - 1}
+                      onClick={() => stepDeck(1)}
                     >
                       Next Live <ArrowRight size={11} className="ml-1" />
                     </Button>

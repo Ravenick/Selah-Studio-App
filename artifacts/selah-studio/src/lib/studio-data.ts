@@ -1,7 +1,7 @@
 import { sectionHeadings } from './studio-workflows';
 import type { TextFormat } from './presentation';
 export type HeaderStyle = { weight: '400' | '500' | '600' | '700'; size: number; color: 'white' | 'teal' | 'gold' | 'rose'; font: 'font-dm' | 'font-georgia' | 'font-mono' };
-export type Slide = { id: string; text: string; label: string; kind: 'song' | 'scripture' | 'media' | 'sermon'; title: string; background?: string | undefined; backgroundType?: 'image' | 'video' | undefined; heading?: string | undefined; headingStyle?: HeaderStyle | undefined; chorus?: boolean | undefined; verses?: { number: number; text: string }[]; formats?: TextFormat[] | undefined };
+export type Slide = { id: string; text: string; label: string; kind: 'song' | 'scripture' | 'media' | 'sermon'; title: string; background?: string; backgroundType?: 'image' | 'video'; heading?: string; headingStyle?: HeaderStyle; chorus?: boolean; verses?: { number: number; text: string }[]; formats?: TextFormat[]; mediaUrl?: string; mediaType?: 'image' | 'video' | 'youtube'; audioMuted?: boolean; youtubeUrl?: string };
 export type Song = { title: string; author: string; tag: string; lyrics: string[]; kind?: 'song' | 'sermon'; sections?: { text: string; chorus: boolean; formats?: TextFormat[] | undefined }[]; background?: string | undefined; backgroundType?: 'image' | 'video' | undefined; headerStyle?: HeaderStyle | undefined; sermonText?: string | undefined; slideBreaks?: number[] | undefined };
 export const songs: Song[] = [
   {
@@ -32,26 +32,6 @@ export const initialTimeline = [
   { id: 'reading', title: 'Sermon Reading', subtitle: 'Psalm 23', kind: 'scripture' },
   { id: 'closing', title: 'Closing Prayer', subtitle: '3 min', kind: 'media' },
 ];
-
-export interface Slide {
-  id: string;
-  title: string;
-  label?: string;
-  text: string;
-  kind?: 'song' | 'scripture' | 'sermon' | 'media';
-  background?: string;
-  backgroundType?: 'image' | 'video';
-  verses?: Array<{ number: number; text: string }>;
-}
-
-export interface Song {
-  id?: string;
-  title: string;
-  author: string;
-  tag?: string;
-  kind?: 'song' | 'sermon';
-  lyrics: string[];
-}
 
 export interface MediaAsset {
   id: string;
