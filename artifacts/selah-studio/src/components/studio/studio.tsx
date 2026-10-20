@@ -202,6 +202,7 @@ const guideSteps = [
 
 export function Studio() {
   // Hidden Upload Input Refs
+  const [transitionMode, setTransitionMode] = useState<'cold' | 'fade'>('fade');
   const scriptureMotionInputRef = useRef<HTMLInputElement>(null);
   const scriptureStillInputRef = useRef<HTMLInputElement>(null);
   const mediaMotionInputRef = useRef<HTMLInputElement>(null);
@@ -586,8 +587,9 @@ export function Studio() {
 
   // Take slide live directly
   const broadcast = useCallback((slide: Slide) => {
-    setOutput({ slide, mode: 'normal' });
-  }, []);
+    setOutput({ slide, mode: 'normal', transitionMode });
+  }, [transitionMode]);
+  // Auto-fallback: Switch away from word blur if active slide is scripture
 
   // Sync active presentation deck card scroll into view smoothly
   useEffect(() => {
@@ -1101,7 +1103,7 @@ export function Studio() {
           setStorePreview(firstSelectedSlide);
 
           if (takeLive) {
-            setOutput({ slide: firstSelectedSlide, mode: 'normal' });
+            setOutput({ slide: firstSelectedSlide, mode: 'normal', transitionMode });
             setStoreLive(firstSelectedSlide);
             setNotice(`Projected Selection Live`);
           } else {
@@ -1310,10 +1312,9 @@ export function Studio() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className={`live-broadcast-pill ${!isLive ? 'off-air' : ''}`}>
-              <span className="live-pulsing-dot" />
-              <span>{isLive ? 'ON AIR' : output.mode.toUpperCase()}</span>
-              {isLive && <span className="opacity-70 font-normal truncate max-w-[160px]">| {output.slide.title}</span>}
+            <div className={`air-status-badge ${autoPush ? 'is-live' : 'is-off'}`}>
+              <span className="status-dot" />
+              <span>{autoPush ? 'ON AIR' : 'OFF AIR'}</span>
             </div>
 
             <div className="prominent-voice-bar">
@@ -1374,7 +1375,7 @@ export function Studio() {
                     className="bg-primary text-black font-semibold"
                     onClick={() => acceptVoiceFeedback(voiceFeedback.parsed!)}
                   >
-                    <Check size={13} className="mr-1" /> Display Live (Enter ↵)
+                    <Check size={13} className="mr-1" />Enter ↵
                   </Button>
                 )}
               </div>
@@ -1455,7 +1456,25 @@ export function Studio() {
               </Button>
             </div>
           </div>
-
+          {/* Insert inside the service-bar controls around line 810 */}
+          <div className="flex items-center gap-1 bg-black/40 p-1 rounded-lg border border-white/10">
+            <button
+              type="button"
+              className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${transitionMode === 'cold' ? 'bg-primary text-black' : 'text-slate-400 hover:text-white'
+                }`}
+              onClick={() => setTransitionMode('cold')}
+            >
+              Cold Cut
+            </button>
+            <button
+              type="button"
+              className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${transitionMode === 'fade' ? 'bg-primary text-black' : 'text-slate-400 hover:text-white'
+                }`}
+              onClick={() => setTransitionMode('fade')}
+            >
+              Fade
+            </button>
+          </div>
           <div className="panic-controls">
             <span>PANIC CONTROLS:</span>
             <Action
@@ -2182,7 +2201,7 @@ export function Studio() {
                 </div>
 
                 <div className="monitor-screen-wrap flex-1 flex items-center justify-center bg-black/60 rounded-md overflow-hidden p-1">
-                  <SlideScreen slide={activeSlide} />
+                  <SlideScreen slide={activeSlide} transitionMode={transitionMode} />
                 </div>
 
                 <div className="monitor-footer py-1 px-1 flex items-center justify-between mt-2">
@@ -2247,7 +2266,7 @@ export function Studio() {
                 </div>
 
                 <div className="monitor-screen-wrap flex-1 flex items-center justify-center bg-black/60 rounded-md overflow-hidden p-1">
-                  <SlideScreen slide={output.slide} mode={output.mode} />
+                  <SlideScreen slide={output.slide} mode={output.mode} transitionMode={output.transitionMode ?? transitionMode} />
                 </div>
 
                 <div className="monitor-footer py-1 px-1 flex items-center justify-between mt-2">
@@ -2663,7 +2682,7 @@ export function Projector() {
 
   return (
     <div className="projector-view">
-      <SlideScreen slide={output.slide} mode={output.mode} />
+      <SlideScreen slide={output.slide} mode={output.mode} transitionMode={output.transitionMode ?? "blur-words"} />
       <Button
         variant="ghost"
         size="icon"

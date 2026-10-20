@@ -67,7 +67,7 @@
   --foreground: oklch(0.129 0.042 264.695);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.129 0.042 264.695);
-  --popover: oklch(1 0 0);
+  --popover: oklch(22.573% 0.02106 18.779);
   --popover-foreground: oklch(0.129 0.042 264.695);
   --primary: oklch(0.208 0.042 265.755);
   --primary-foreground: oklch(0.984 0.003 247.858);
@@ -4579,17 +4579,221 @@ h1 {
   }
 }
 
+/* Opaque, Floating Logo Container */
+.output-logo-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  border-radius: 1.5rem;
+  overflow: hidden;
+  /* Subtle floating hover animation */
+  animation: logoSubtleHover 8s ease-in-out infinite;
+}
+
+/* Opaque Logo */
+.output-logo {
+  height: 110px;
+  width: auto;
+  object-fit: contain;
+  opacity: 1;
+  filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.65));
+}
+
+/* Glass Swipe Sheen Overlay */
+.output-logo-wrapper::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(110deg,
+      transparent 35%,
+      rgba(255, 255, 255, 0.05) 42%,
+      rgba(255, 255, 255, 0.244) 50%,
+      rgba(255, 255, 255, 0.05) 58%,
+      transparent 65%);
+  transform: translateX(-150%) rotate(25deg);
+  /* 5-second cycle loop */
+  animation: logoGlassSwipe 7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+
+/* Floating Hover Animation */
+@keyframes logoSubtleHover {
+
+  0%,
+  100% {
+    transform: translateY(0px) scale(1);
+  }
+
+  50% {
+    transform: translateY(-10px) scale(1.02);
+  }
+}
+
+/* 5-Second Glass Sheen Loop (1.2s sweep + 3.8s pause) */
+@keyframes logoGlassSwipe {
+  0% {
+    transform: translateX(-150%) rotate(25deg);
+  }
+
+  74% {
+    transform: translateX(150%) rotate(25deg);
+  }
+
+  100% {
+    transform: translateX(150%) rotate(25deg);
+  }
+}
+
+/* Air Status Badge Base */
+.air-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.air-status-badge .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+/* OFF AIR State: Static Green (No Pulse, No Glow) */
+.air-status-badge.is-off {
+  background: rgba(34, 197, 94, 0.12);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  box-shadow: none;
+  animation: none;
+}
+
+.air-status-badge.is-off .status-dot {
+  background-color: #22c55e;
+  box-shadow: none;
+  animation: none;
+}
+
+/* ON AIR State: Red Glow & Pulsing (Only when isLive / active) */
+.air-status-badge.is-live {
+  background: rgba(239, 68, 68, 0.18);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  animation: air-glow 2s ease-in-out infinite;
+}
+
+.air-status-badge.is-live .status-dot {
+  background-color: #ef4444;
+  box-shadow: 0 0 10px #ef4444;
+  animation: air-pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Keyframes */
+@keyframes air-pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.3;
+    transform: scale(1.25);
+  }
+}
+
+@keyframes air-glow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+  }
+
+  50% {
+    box-shadow: 0 0 22px rgba(239, 68, 68, 0.65);
+  }
+}
+
+/* Glassmorphism Voice Result Popover with 3s Swipe Sheen */
 .voice-result-popover {
   position: absolute;
   top: 60px;
   right: 20px;
   width: 340px;
-  background: var(--popover);
-  border: 1px solid var(--primary);
-  border-radius: 8px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-  padding: 14px;
+  padding: 16px;
+  border-radius: 12px;
   z-index: 100;
+  isolation: isolate;
+  overflow: hidden;
+
+  /* Frosted Glass using HSL Color System */
+  background: rgba(0, 0, 0, 0.442);
+  color: hsl(var(--popover-foreground));
+  border: 1px solid hsl(var(--popover-border) / 0.85);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  box-shadow:
+    0 20px 50px rgb(0, 0, 0),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* Ensure inner content renders crisply over the glass sheen */
+.voice-result-popover>* {
+  position: relative;
+  z-index: 1;
+}
+
+/* Light Sheen Overlay (Slower, smoother glide) */
+.voice-result-popover::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: -150% -50%;
+  background: linear-gradient(115deg,
+      transparent 40%,
+      rgba(255, 255, 255, 0.02) 44%,
+      rgba(255, 255, 255, 0.22) 50%,
+      rgba(255, 255, 255, 0.02) 56%,
+      transparent 60%);
+  transform: translateX(-130%) rotate(20deg);
+  /* Total cycle extended to 4.5s for a gentler cadence */
+  animation: popover-glass-swipe 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+
+/* Glass Sheen Keyframes (Swipes in 1.8s, rests for 2.7s) */
+@keyframes popover-glass-swipe {
+  0% {
+    transform: translateX(-130%) rotate(20deg);
+  }
+
+  40% {
+    transform: translateX(140%) rotate(20deg);
+  }
+
+  100% {
+    transform: translateX(140%) rotate(20deg);
+  }
+}
+
+
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-result-popover::before {
+    animation: none;
+  }
 }
 
 .voice-result-popover h4 {
