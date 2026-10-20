@@ -92,6 +92,13 @@ const ALL_MOTIONS: Omit<MediaAsset, 'target'>[] = [
 ];
 
 export const SCRIPTURE_BACKGROUNDS: MediaAsset[] = [
+  {
+    id: 'scripture-echo-spheres-party',
+    title: 'Echo Spheres Party',
+    url: "/backgrounds/stills/Echo Spheres Party - 16x9.jpg",
+    type: 'image',
+    target: 'scripture',
+  },
   ...ALL_MOTIONS.map((item) => ({ ...item, target: 'scripture' as const })),
   ...ALL_STILLS.map((item) => ({ ...item, target: 'scripture' as const })),
 ];

@@ -142,12 +142,8 @@ const accents: [string, string][] = [
   ['gold', 'Holy Gold'],
   ['purple', 'Deep Purple'],
 ];
-const presets: [string, string][] = [
-  ['Psalms', '23'],
-  ['Romans', '8'],
-  ['Genesis', '1'],
-  ['John', '3'],
-];
+
+
 const initialScripture: Slide = {
   id: 'ps23-1',
   title: 'Psalm 23:1',
@@ -1651,21 +1647,7 @@ export function Studio() {
                       ))}
                   </div>
 
-                  <div className="drop-zone mt-2">
-                    <div>
-                      <span className="upload-icon">
-                        <Upload size={16} />
-                      </span>
-                      <strong>Quick Paste Lyrics</strong>
-                      <p>Blank line separates verses automatically.</p>
-                    </div>
-                    <textarea
-                      aria-label="Paste lyrics"
-                      placeholder="Paste CCLI or song lyrics here..."
-                      value={lyrics}
-                      onChange={(e) => parseLyrics(e.target.value)}
-                    />
-                  </div>
+
                 </>
               )}
 
@@ -1932,38 +1914,8 @@ export function Studio() {
                     </div>
                   </div>
 
-                  <div className="presets">
-                    {presets.map(([b, c]) => (
-                      <Button
-                        key={b}
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setBook(b);
-                          setChapter(c);
-                          setVerse('1');
-                          previewVerse(false);
-                        }}
-                      >
-                        {b} {c}
-                      </Button>
-                    ))}
-                  </div>
 
-                  <div className="mt-2">
-                    <Button
-                      className="w-full bg-primary text-black font-bold uppercase tracking-wider text-xs h-9"
-                      onClick={() => displayHighlightedVerses(autoPush)}
-                    >
-                      <Radio size={14} className="mr-1.5" />
-                      {autoPush ? 'Project Live Instantly [↵]' : 'Update Preview Monitor [↵]'}
-                    </Button>
-                  </div>
 
-                  <div className="mt-4">
-                    <SectionLabel icon={<ImageIcon size={14} />}>SCRIPTURE BACKGROUND</SectionLabel>
-                    <BackgroundPicker value={scriptureBackground} onChoose={chooseScriptureBackground} />
-                  </div>
                 </>
               )}
 
@@ -2071,7 +2023,7 @@ export function Studio() {
               tabIndex={0}
               onClick={() => setActiveFocus('deck')}
               onFocus={() => setActiveFocus('deck')}
-              className={`media-presentation-timeline-pane bg-neutral-900/90 border rounded-xl p-2.5 flex flex-col gap-2 w-full shrink-0 shadow-lg transition-all outline-none ${activeFocus === 'deck' ? 'border-primary ring-1 ring-primary/40 shadow-[0_0_12px_rgba(0,242,254,0.15)]' : 'border-white/10'
+              className={`media-presentation-timeline-pane bg-neutral-900/90 border rounded-xl p-2 flex flex-col gap-2 w-full h-[20vh] shrink-0 shadow-lg transition-all outline-none ${activeFocus === 'deck' ? 'border-primary ring-1 ring-primary/40 shadow-[0_0_12px_rgba(0,242,254,0.15)]' : 'border-white/10'
                 }`}
             >
               <div className="flex items-center justify-between">
@@ -2317,29 +2269,6 @@ export function Studio() {
                       onClick={() => stepDeck(1)}
                     >
                       Next Live <ArrowRight size={11} className="ml-1" />
-                    </Button>
-                  </div>
-
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={`h-6 text-[11px] px-1.5 ${output.mode === 'blackout' ? 'text-red-400 font-bold' : ''}`}
-                      onClick={() =>
-                        setOutput((o) => ({ ...o, mode: o.mode === 'blackout' ? 'normal' : 'blackout' }))
-                      }
-                    >
-                      <Square size={11} className="mr-1" /> Black
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={`h-6 text-[11px] px-1.5 ${output.mode === 'clear' ? 'text-amber-400 font-bold' : ''}`}
-                      onClick={() =>
-                        setOutput((o) => ({ ...o, mode: o.mode === 'clear' ? 'normal' : 'clear' }))
-                      }
-                    >
-                      <TextCursorInput size={11} className="mr-1" /> Clear
                     </Button>
                   </div>
                 </div>
