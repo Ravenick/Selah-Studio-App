@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
+  chapters,
+  initialTimeline,
+  songs,
+  songSlides,
+  SCRIPTURE_BACKGROUNDS,
+  MEDIA_BACKGROUNDS,
+  type Slide,
+  type Song,
+  type MediaAsset,
+} from '@/lib/studio-data';
+import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
@@ -41,7 +52,6 @@ import {
 import { Button, type ButtonProps } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { chapters, initialTimeline, songs, songSlides, type Slide, type Song } from '@/lib/studio-data';
 import { getChapter, matchingBooks, resolveBook, validChapter, validNumber, getMaxChapters, getMaxVerses, bibleBooks } from '@/lib/studio-workflows';
 import { SongBuilder } from './song-builder';
 import { Switch } from '@/components/ui/switch';
@@ -192,6 +202,55 @@ const guideSteps = [
 ];
 
 export function Studio() {
+  // Hidden Upload Input Refs
+  const scriptureMotionInputRef = useRef<HTMLInputElement>(null);
+  const scriptureStillInputRef = useRef<HTMLInputElement>(null);
+  const mediaMotionInputRef = useRef<HTMLInputElement>(null);
+  const mediaStillInputRef = useRef<HTMLInputElement>(null);
+  // Custom uploaded backgrounds state
+  const [customScriptureBgs, setCustomScriptureBgs] = useState<MediaAsset[]>([]);
+  const [customMediaBgs, setCustomMediaBgs] = useState<MediaAsset[]>([]);
+  // Media Explorer Modal State
+  const [isMediaExplorerOpen, setIsMediaExplorerOpen] = useState(false);
+  const [mediaBackground, setMediaBackground] = useState('/backgrounds/motion/blue-particles.mp4');
+  const [mediaBackgroundType, setMediaBackgroundType] = useState<'image' | 'video'>('video');
+  // Handle Custom Uploads for Scripture
+  function handleUploadScriptureAsset(e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const fileUrl = URL.createObjectURL(file);
+    const newAsset: MediaAsset = {
+      id: `custom-scrip-${Date.now()}`,
+      title: file.name.replace(/\.[^/.]+$/, ''),
+      url: fileUrl,
+      type,
+      target: 'scripture',
+    };
+
+    setCustomScriptureBgs((prev) => [newAsset, ...prev]);
+    chooseScriptureBackground(newAsset);
+    setNotice(`Uploaded custom scripture ${type === 'video' ? 'motion loop' : 'still'}.`);
+  }
+
+  // Handle Custom Uploads for Songs/Sermons
+  function handleUploadMediaAsset(e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const fileUrl = URL.createObjectURL(file);
+    const newAsset: MediaAsset = {
+      id: `custom-media-${Date.now()}`,
+      title: file.name.replace(/\.[^/.]+$/, ''),
+      url: fileUrl,
+      type,
+      target: 'media',
+    };
+
+    setCustomMediaBgs((prev) => [newAsset, ...prev]);
+    chooseMediaBackground(newAsset);
+    setNotice(`Uploaded custom song/sermon ${type === 'video' ? 'motion loop' : 'still'}.`);
+  }
   const [builderOpen, setBuilderOpen] = useState(false);
   const [autoPush, setAutoPush] = useState(false);
   const setStoreAuto = useAppStore((state) => state.setAutoLiveSync);
@@ -207,15 +266,115 @@ export function Studio() {
   const [workflow, setWorkflow] = useState(false);
   const [builderMode, setBuilderMode] = useState<'song' | 'sermon'>('song');
   const [builderSong, setBuilderSong] = useState<Song | undefined>();
+  // Schedule state & dirty tracking
+  const [isDirty, setIsDirty] = useState(false);
+  const [currentScheduleName, setCurrentScheduleName] = useState('Sunday_Worship_Service');
+  const [recentSchedules, setRecentSchedules] = useState<
+    Array<{ id: string; name: string; savedAt: string; payload: any }>
+  >([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Load recent schedules from local storage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('selah-recent-schedules');
+      if (stored) setRecentSchedules(JSON.parse(stored));
+    } catch {
+      // Fallback
+    }
+  }, []);
+
+  // Save Schedule to computer (.selah JSON)
+  async function handleSaveSchedule() {
+    const payload = {
+      version: '1.0',
+      timestamp: new Date().toISOString(),
+      name: currentScheduleName,
+      slides,
+      mediaDeckSlides,
+      song,
+      scriptureBackground,
+      mediaBackground,
+    };
+
+    const jsonString = JSON.stringify(payload, null, 2);
+
+    // Native OS File Save Dialog (Tauri & Web File System API)
+    if ('showSaveFilePicker' in window) {
+      try {
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: `${currentScheduleName}.selah`,
+          types: [
+            {
+              description: 'Selah Studio Schedule (*.selah)',
+              accept: { 'application/json': ['.selah'] },
+            },
+          ],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(jsonString);
+        await writable.close();
+
+        setIsDirty(false);
+        setNotice(`Schedule saved successfully.`);
+        return;
+      } catch (err: any) {
+        if (err.name === 'AbortError') return; // User cancelled save
+      }
+    }
+
+    // Fallback standard browser download
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${currentScheduleName}.selah`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setIsDirty(false);
+  }
+
+  // Load schedule from computer file or recent drawer
+  function applySchedulePayload(payload: any) {
+    if (payload.slides) setSlides(payload.slides);
+    if (payload.mediaDeckSlides) setMediaDeckSlides(payload.mediaDeckSlides);
+    if (payload.song) setSong(payload.song);
+    if (payload.scriptureBackground) setScriptureBackground(payload.scriptureBackground);
+    if (payload.name) setCurrentScheduleName(payload.name);
+
+    setSelected(0);
+    setSelectedMediaDeckIdx(0);
+    setIsDirty(false);
+    setNotice(`Loaded schedule "${payload.name}"`);
+  }
+
+  function handleImportSchedule(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const payload = JSON.parse(event.target?.result as string);
+        applySchedulePayload(payload);
+      } catch {
+        setNotice('Invalid .selah schedule file.');
+      }
+    };
+    reader.readAsText(file);
+  }
   // Hymn Search
   const [publicHymnSearch, setPublicHymnSearch] = useState(false);
   const [publicHymnResults, setPublicHymnResults] = useState<PublicHymn[]>([]);
   const [publicHymnStatus, setPublicHymnStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
 
   // Background Selection
-  const [scriptureBackground, setScriptureBackground] = useState('scripture-obsidian');
+  // Default Constant Backgrounds
+  const [scriptureBackground, setScriptureBackground] = useState(
+    '/backgrounds/stills/Echo Spheres Party - 16x9.jpg'
+  );
   const [scriptureBackgroundType, setScriptureBackgroundType] = useState<'image' | 'video'>('image');
+
 
   // Scripture Keyword & Full-text Search
   const [scriptureSearchQuery, setScriptureSearchQuery] = useState('');
@@ -633,13 +792,23 @@ export function Studio() {
 
   // Load song into presentation deck
   function loadSong(item: Song) {
-    const next = songSlides(item);
+    // Attach active mediaBackground constant to every generated slide
+    const generatedSlides = songSlides(item).map((s) => ({
+      ...s,
+      background: mediaBackground,
+      backgroundType: mediaBackgroundType,
+    }));
+
     setSong(item);
-    setSlides(next);
-    setMediaDeckSlides(next);
+    setSlides(generatedSlides);
+    setMediaDeckSlides(generatedSlides);
     setSelectedMediaDeckIdx(0);
     setSelected(0);
-    setNotice(`Loaded "${item.title}" into Media Deck.`);
+    loadPreview(generatedSlides[0]);
+    if (autoPush) broadcast(generatedSlides[0]);
+
+    setIsDirty(true);
+    setNotice(`Loaded "${item.title}" with persistent background.`);
   }
 
   // Delete song permanently from library
@@ -677,7 +846,6 @@ export function Studio() {
       setMediaDeckSlides(updatedSlides);
       setSlides(updatedSlides);
 
-      // Mutate global song structure
       if (song) {
         const updatedLyrics = [...song.lyrics];
         updatedLyrics[editingSlideIdx] = editingText;
@@ -686,13 +854,12 @@ export function Studio() {
         setSong(updatedSong);
         setLibrarySongs((prev) => prev.map((s) => (s.title === updatedSong.title ? updatedSong : s)));
 
-        // Persist to local storage
         try {
           const saved = JSON.parse(localStorage.getItem('selah-local-songs') || '[]') as Song[];
           const filtered = saved.filter((s) => s.title !== updatedSong.title);
           localStorage.setItem('selah-local-songs', JSON.stringify([...filtered, updatedSong]));
         } catch {
-          // Local fallback
+          // Fallback
         }
       }
 
@@ -701,6 +868,7 @@ export function Studio() {
         if (autoPush) broadcast(fixedSlide);
       }
 
+      setIsDirty(true); // <-- Added dirty flag
       setNotice('Verse updated globally and live!');
     }
     setEditingSlideIdx(null);
@@ -713,11 +881,11 @@ export function Studio() {
     const customSong = { title: 'Untitled worship song', author: 'Your lyrics', tag: 'Custom', lyrics: chunks };
     setSong(customSong);
     const next = songSlides(customSong);
-    setSong(customSong);
     setSlides(next);
     setMediaDeckSlides(next);
     setSelectedMediaDeckIdx(0);
     setSelected(0);
+    setIsDirty(true); // <-- Added dirty flag
   }
 
   function pickBook(value: string) {
@@ -849,15 +1017,88 @@ export function Studio() {
     }, 10);
   }
 
-  function chooseScriptureBackground(url: string, type: 'image' | 'video', id?: string) {
-    const nextBackground = id ? (id.startsWith('scripture-') ? id : `local-background:${id}`) : url;
-    setScriptureBackground(nextBackground);
-    setScriptureBackgroundType(type);
-    setSlides((items) =>
-      items.map((slide) =>
-        slide.kind === 'scripture' ? { ...slide, background: nextBackground, backgroundType: type } : slide,
-      ),
+  // Set Scripture Background
+  // Persistent Scripture Background Chooser
+  function chooseScriptureBackground(asset: MediaAsset) {
+    setScriptureBackground(asset.url);
+    setScriptureBackgroundType(asset.type);
+
+    setSlides((prev) =>
+      prev.map((s) =>
+        s.kind === 'scripture'
+          ? { ...s, background: asset.url, backgroundType: asset.type }
+          : s
+      )
     );
+    setMediaDeckSlides((prev) =>
+      prev.map((s) =>
+        s.kind === 'scripture'
+          ? { ...s, background: asset.url, backgroundType: asset.type }
+          : s
+      )
+    );
+
+    if (slides[selected]?.kind === 'scripture') {
+      const updated = { ...slides[selected], background: asset.url, backgroundType: asset.type };
+      loadPreview(updated);
+      if (autoPush) broadcast(updated);
+    }
+
+    setIsDirty(true);
+    setNotice('Scripture background updated as active constant.');
+  }
+
+  // Persistent Song / Sermon Background Chooser
+  function chooseMediaBackground(asset: MediaAsset) {
+    setMediaBackground(asset.url);
+    setMediaBackgroundType(asset.type);
+
+    setSlides((prev) =>
+      prev.map((s) =>
+        s.kind !== 'scripture'
+          ? { ...s, background: asset.url, backgroundType: asset.type }
+          : s
+      )
+    );
+    setMediaDeckSlides((prev) =>
+      prev.map((s) =>
+        s.kind !== 'scripture'
+          ? { ...s, background: asset.url, backgroundType: asset.type }
+          : s
+      )
+    );
+
+    if (slides[selected] && slides[selected].kind !== 'scripture') {
+      const updated = { ...slides[selected], background: asset.url, backgroundType: asset.type };
+      loadPreview(updated);
+      if (autoPush) broadcast(updated);
+    }
+
+    setIsDirty(true);
+    setNotice('Song/Sermon background updated as active constant.');
+  }
+
+  // Set Song / Sermon Background
+  function chooseMediaBackground(asset: MediaAsset) {
+    setMediaBackground(asset.url);
+    setMediaBackgroundType(asset.type);
+
+    // Dynamically re-bind active song/sermon slides with this background
+    setSlides((prev) =>
+      prev.map((slide) =>
+        slide.kind !== 'scripture'
+          ? { ...slide, background: asset.url, backgroundType: asset.type }
+          : slide
+      )
+    );
+    setMediaDeckSlides((prev) =>
+      prev.map((slide) =>
+        slide.kind !== 'scripture'
+          ? { ...slide, background: asset.url, backgroundType: asset.type }
+          : slide
+      )
+    );
+    setIsDirty(true);
   }
 
   function acceptVoiceFeedback(parsed: ParsedSpokenReference) {
@@ -1084,9 +1325,33 @@ export function Studio() {
               <ListMusic size={16} />
             </span>
             <strong>Sunday Worship Service</strong>
-            <span className="saved">
-              <CheckCheck size={13} /> Saved locally on device
-            </span>
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".selah,.json"
+                className="hidden"
+                onChange={handleImportSchedule}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1 bg-white/5 border-white/10 hover:bg-white/10"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload size={12} /> Load Schedule
+              </Button>
+              <Button
+                size="sm"
+                className={`h-7 text-xs font-bold gap-1 transition-all ${isDirty
+                  ? 'bg-primary text-black opacity-100 shadow-[0_0_10px_rgba(0,242,254,0.4)]'
+                  : 'bg-white/10 text-slate-300 opacity-50'
+                  }`}
+                onClick={handleSaveSchedule}
+              >
+                <CheckCheck size={12} /> Save Schedule {isDirty && '•'}
+              </Button>
+            </div>
           </div>
 
           <div className="panic-controls">
@@ -1596,49 +1861,79 @@ export function Studio() {
               )}
 
               {tab === 'Media' && (
-                <>
-                  <SectionLabel icon={<ImageIcon size={14} />}>ROYALTY-FREE WORSHIP MEDIA</SectionLabel>
-                  <BackgroundPicker
-                    presets={false}
-                    onChoose={(url, type) => {
-                      const slide: Slide = {
-                        id: `media-${Date.now()}`,
-                        title: 'Media Background',
-                        label: type === 'video' ? 'Motion Loop' : 'Atmospheric Still',
-                        text: '',
-                        kind: 'media',
-                        background: url,
-                        backgroundType: type,
-                      };
-                      setSlides([slide]);
-                      setMediaDeckSlides([slide]);
-                      setSelected(0);
-                      setSelectedMediaDeckIdx(0);
-                      loadPreview(slide);
-                    }}
-                  />
-                </>
+                <div className="flex flex-col gap-3">
+                  {/* Scripture Active Background Card */}
+                  <div className="p-2.5 rounded-lg bg-white/5 border border-white/10 flex flex-col gap-1.5">
+                    <span className="text-[10px] font-bold text-primary uppercase">Active Scripture Background</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-12 h-8 rounded bg-black/60 border border-white/10 overflow-hidden flex items-center justify-center">
+                        {scriptureBackgroundType === 'video' ? (
+                          <video src={scriptureBackground} className="w-full h-full object-cover" autoPlay loop muted />
+                        ) : (
+                          <img src={scriptureBackground} alt="" className="w-full h-full object-cover" />
+                        )}
+                      </div>
+                      <div className="flex flex-col">
+                        <strong className="text-xs text-slate-200">
+                          {scriptureBackground.split('/').pop()}
+                        </strong>
+                        <span className="text-[10px] text-slate-400 capitalize">{scriptureBackgroundType} Loop</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Song/Sermon Active Background Card */}
+                  <div className="p-2.5 rounded-lg bg-white/5 border border-white/10 flex flex-col gap-1.5">
+                    <span className="text-[10px] font-bold text-primary uppercase">Active Song/Sermon Background</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-12 h-8 rounded bg-black/60 border border-white/10 overflow-hidden flex items-center justify-center">
+                        {mediaBackgroundType === 'video' ? (
+                          <video src={mediaBackground} className="w-full h-full object-cover" autoPlay loop muted />
+                        ) : (
+                          <img src={mediaBackground} alt="" className="w-full h-full object-cover" />
+                        )}
+                      </div>
+                      <div className="flex flex-col">
+                        <strong className="text-xs text-slate-200">
+                          {mediaBackground.split('/').pop()}
+                        </strong>
+                        <span className="text-[10px] text-slate-400 capitalize">{mediaBackgroundType} Loop</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Modal Explorer Trigger */}
+                  <Button
+                    className="w-full h-9 bg-primary text-black font-bold text-xs gap-1.5 mt-1"
+                    onClick={() => setIsMediaExplorerOpen(true)}
+                  >
+                    <ImageIcon size={14} /> Explore & Select Backgrounds
+                  </Button>
+                </div>
               )}
 
               {tab === 'Schedules' && (
-                <>
-                  <SectionLabel icon={<ListMusic size={14} />}>SERVICE TIMELINE</SectionLabel>
-                  {timeline.map((item, i) => (
-                    <Button
-                      key={item.id}
-                      className="schedule-row"
-                      variant="ghost"
-                      onClick={() => loadTimeline(item.id)}
-                    >
-                      <span>{String(i + 1).padStart(2, '0')}</span>
-                      <strong>{item.title}</strong>
-                      <ChevronRight size={14} />
-                    </Button>
-                  ))}
-                  <Button variant="outline" className="wide-button mt-3" onClick={addTimeline}>
-                    <Plus size={14} /> Add current slide to schedule
-                  </Button>
-                </>
+                <div className="flex flex-col gap-2">
+                  <SectionLabel icon={<ListMusic size={14} />}>RECENT SCHEDULES (QUICK ACCESS)</SectionLabel>
+                  {recentSchedules.length === 0 ? (
+                    <p className="text-xs text-slate-400 p-2">No recent schedules saved yet.</p>
+                  ) : (
+                    recentSchedules.map((entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        className="flex items-center justify-between p-2 rounded-lg bg-white/5 hover:bg-white/10 text-left border border-white/5 transition-colors"
+                        onClick={() => applySchedulePayload(entry.payload)}
+                      >
+                        <div className="flex flex-col truncate">
+                          <strong className="text-xs text-slate-200 truncate">{entry.name}</strong>
+                          <span className="text-[10px] text-slate-400">Saved at {entry.savedAt}</span>
+                        </div>
+                        <ChevronRight className="text-slate-400 shrink-0" size={14} />
+                      </button>
+                    ))
+                  )}
+                </div>
               )}
             </div>
           </aside>
@@ -1716,8 +2011,8 @@ export function Studio() {
                         if (autoPush) broadcast(slideItem);
                       }}
                       className={`flex-none w-44 aspect-video rounded-md p-2 border cursor-pointer flex flex-col justify-between transition-all relative group ${isCurrentActive
-                          ? 'bg-primary/10 border-primary shadow-[0_0_10px_rgba(0,242,254,0.25)] text-white'
-                          : 'bg-white/5 border-white/10 hover:bg-white/10 text-slate-300'
+                        ? 'bg-primary/10 border-primary shadow-[0_0_10px_rgba(0,242,254,0.25)] text-white'
+                        : 'bg-white/5 border-white/10 hover:bg-white/10 text-slate-300'
                         }`}
                     >
                       <div className="flex justify-between items-center">
@@ -1938,6 +2233,203 @@ export function Studio() {
         </footer>
 
         {/* Modals & Sheets */}
+        {/* Background Library Explorer Modal */}
+        {isMediaExplorerOpen && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="bg-neutral-900 border border-white/10 rounded-xl p-5 w-full max-w-5xl max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+
+              {/* Hidden File Inputs */}
+              <input
+                ref={scriptureMotionInputRef}
+                type="file"
+                accept="video/mp4,video/webm"
+                className="hidden"
+                onChange={(e) => handleUploadScriptureAsset(e, 'video')}
+              />
+              <input
+                ref={scriptureStillInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleUploadScriptureAsset(e, 'image')}
+              />
+              <input
+                ref={mediaMotionInputRef}
+                type="file"
+                accept="video/mp4,video/webm"
+                className="hidden"
+                onChange={(e) => handleUploadMediaAsset(e, 'video')}
+              />
+              <input
+                ref={mediaStillInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleUploadMediaAsset(e, 'image')}
+              />
+
+              {/* Modal Sticky Header */}
+              <div className="flex justify-between items-center border-b border-white/10 pb-3 mb-3 shrink-0">
+                <div className="flex items-center gap-2">
+                  <ImageIcon size={18} className="text-primary" />
+                  <h3 className="text-sm font-bold text-slate-100 tracking-wide">
+                    SELAH BACKGROUND MEDIA LIBRARY
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+                  onClick={() => setIsMediaExplorerOpen(false)}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Internal Scrollable Content */}
+              <div className="grid grid-cols-2 gap-6 overflow-y-auto pr-2 flex-1 scrollbar-thin">
+
+                {/* ==================== SCRIPTURE COLUMN ==================== */}
+                <div className="flex flex-col gap-4">
+                  <div className="sticky top-0 bg-neutral-900/95 py-2 z-10 border-b border-white/10 flex justify-between items-center">
+                    <span className="text-xs font-bold text-primary uppercase tracking-wider">
+                      📖 Scripture Backgrounds
+                    </span>
+                  </div>
+
+                  {/* Scripture Motions Section */}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
+                      <span className="flex items-center gap-1">🎥 Motion Loops (.mp4, .webm)</span>
+                      <div className="flex items-center gap-2">
+                        <a href="https://storyloop.com/site/freebies" target="_blank" rel="noreferrer" className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
+                          Story Loop <ExternalLink size={9} />
+                        </a>
+                        <Button size="sm" variant="outline" className="h-5 text-[9px] px-1.5 gap-1 bg-white/5 border-white/10" onClick={() => scriptureMotionInputRef.current?.click()}>
+                          <Upload size={9} /> Upload Loop
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[...customScriptureBgs.filter((a) => a.type === 'video'), ...SCRIPTURE_BACKGROUNDS.filter((a) => a.type === 'video')].map((asset) => (
+                        <div
+                          key={asset.id}
+                          className={`p-1.5 rounded-lg border cursor-pointer flex flex-col gap-1 transition-all ${scriptureBackground === asset.url ? 'border-primary bg-primary/10 shadow-[0_0_10px_rgba(0,242,254,0.25)]' : 'border-white/10 hover:border-white/20'
+                            }`}
+                          onClick={() => chooseScriptureBackground(asset)}
+                        >
+                          <div className="aspect-video rounded bg-black overflow-hidden relative">
+                            <video src={asset.url} className="w-full h-full object-cover" autoPlay loop muted />
+                          </div>
+                          <span className="text-[10px] font-bold truncate text-slate-200">{asset.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Scripture Stills Section */}
+                  <div className="flex flex-col gap-2 mt-2">
+                    <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
+                      <span className="flex items-center gap-1">🖼️ Still Backgrounds (Images)</span>
+                      <div className="flex items-center gap-2">
+                        <a href="https://www.churchmotiongraphics.com/free-worship-media/" target="_blank" rel="noreferrer" className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
+                          CMG Stills <ExternalLink size={9} />
+                        </a>
+                        <Button size="sm" variant="outline" className="h-5 text-[9px] px-1.5 gap-1 bg-white/5 border-white/10" onClick={() => scriptureStillInputRef.current?.click()}>
+                          <Upload size={9} /> Upload Still
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[...customScriptureBgs.filter((a) => a.type === 'image'), ...SCRIPTURE_BACKGROUNDS.filter((a) => a.type === 'image')].map((asset) => (
+                        <div
+                          key={asset.id}
+                          className={`p-1.5 rounded-lg border cursor-pointer flex flex-col gap-1 transition-all ${scriptureBackground === asset.url ? 'border-primary bg-primary/10 shadow-[0_0_10px_rgba(0,242,254,0.25)]' : 'border-white/10 hover:border-white/20'
+                            }`}
+                          onClick={() => chooseScriptureBackground(asset)}
+                        >
+                          <div className="aspect-video rounded bg-black overflow-hidden relative">
+                            <img src={asset.url} alt="" className="w-full h-full object-cover" />
+                          </div>
+                          <span className="text-[10px] font-bold truncate text-slate-200">{asset.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* ==================== SONG / SERMON COLUMN ==================== */}
+                <div className="flex flex-col gap-4">
+                  <div className="sticky top-0 bg-neutral-900/95 py-2 z-10 border-b border-white/10 flex justify-between items-center">
+                    <span className="text-xs font-bold text-primary uppercase tracking-wider">
+                      🎵 Song & Sermon Backgrounds
+                    </span>
+                  </div>
+
+                  {/* Song/Sermon Motions Section */}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
+                      <span className="flex items-center gap-1">🎥 Motion Loops (.mp4, .webm)</span>
+                      <div className="flex items-center gap-2">
+                        <a href="https://storyloop.com/site/freebies" target="_blank" rel="noreferrer" className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
+                          Story Loop <ExternalLink size={9} />
+                        </a>
+                        <Button size="sm" variant="outline" className="h-5 text-[9px] px-1.5 gap-1 bg-white/5 border-white/10" onClick={() => mediaMotionInputRef.current?.click()}>
+                          <Upload size={9} /> Upload Loop
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[...customMediaBgs.filter((a) => a.type === 'video'), ...MEDIA_BACKGROUNDS.filter((a) => a.type === 'video')].map((asset) => (
+                        <div
+                          key={asset.id}
+                          className={`p-1.5 rounded-lg border cursor-pointer flex flex-col gap-1 transition-all ${mediaBackground === asset.url ? 'border-primary bg-primary/10 shadow-[0_0_10px_rgba(0,242,254,0.25)]' : 'border-white/10 hover:border-white/20'
+                            }`}
+                          onClick={() => chooseMediaBackground(asset)}
+                        >
+                          <div className="aspect-video rounded bg-black overflow-hidden relative">
+                            <video src={asset.url} className="w-full h-full object-cover" autoPlay loop muted />
+                          </div>
+                          <span className="text-[10px] font-bold truncate text-slate-200">{asset.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Song/Sermon Stills Section */}
+                  <div className="flex flex-col gap-2 mt-2">
+                    <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
+                      <span className="flex items-center gap-1">🖼️ Still Backgrounds (Images)</span>
+                      <div className="flex items-center gap-2">
+                        <a href="https://www.churchmotiongraphics.com/free-worship-media/" target="_blank" rel="noreferrer" className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
+                          CMG Stills <ExternalLink size={9} />
+                        </a>
+                        <Button size="sm" variant="outline" className="h-5 text-[9px] px-1.5 gap-1 bg-white/5 border-white/10" onClick={() => mediaStillInputRef.current?.click()}>
+                          <Upload size={9} /> Upload Still
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[...customMediaBgs.filter((a) => a.type === 'image'), ...MEDIA_BACKGROUNDS.filter((a) => a.type === 'image')].map((asset) => (
+                        <div
+                          key={asset.id}
+                          className={`p-1.5 rounded-lg border cursor-pointer flex flex-col gap-1 transition-all ${mediaBackground === asset.url ? 'border-primary bg-primary/10 shadow-[0_0_10px_rgba(0,242,254,0.25)]' : 'border-white/10 hover:border-white/20'
+                            }`}
+                          onClick={() => chooseMediaBackground(asset)}
+                        >
+                          <div className="aspect-video rounded bg-black overflow-hidden relative">
+                            <img src={asset.url} alt="" className="w-full h-full object-cover" />
+                          </div>
+                          <span className="text-[10px] font-bold truncate text-slate-200">{asset.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        )}
         {builderOpen && (
           <SongBuilder
             mode={builderMode}

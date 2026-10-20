@@ -1,17 +1,19 @@
 import { sectionHeadings } from './studio-workflows';
 import type { TextFormat } from './presentation';
 export type HeaderStyle = { weight: '400' | '500' | '600' | '700'; size: number; color: 'white' | 'teal' | 'gold' | 'rose'; font: 'font-dm' | 'font-georgia' | 'font-mono' };
-export type Slide = { id: string; text: string; label: string; kind: 'song' | 'scripture' | 'media' | 'sermon'; title: string; background?: string | undefined; backgroundType?: 'image' | 'video' | undefined; heading?: string | undefined; headingStyle?: HeaderStyle | undefined; chorus?: boolean | undefined; verses?: {number:number; text:string}[]; formats?: TextFormat[] | undefined };
+export type Slide = { id: string; text: string; label: string; kind: 'song' | 'scripture' | 'media' | 'sermon'; title: string; background?: string | undefined; backgroundType?: 'image' | 'video' | undefined; heading?: string | undefined; headingStyle?: HeaderStyle | undefined; chorus?: boolean | undefined; verses?: { number: number; text: string }[]; formats?: TextFormat[] | undefined };
 export type Song = { title: string; author: string; tag: string; lyrics: string[]; kind?: 'song' | 'sermon'; sections?: { text: string; chorus: boolean; formats?: TextFormat[] | undefined }[]; background?: string | undefined; backgroundType?: 'image' | 'video' | undefined; headerStyle?: HeaderStyle | undefined; sermonText?: string | undefined; slideBreaks?: number[] | undefined };
 export const songs: Song[] = [
-  { title: 'Amazing Grace', author: 'John Newton', tag: 'Hymn', lyrics: [
-    'Amazing grace! How sweet the sound\nThat saved a wretch like me!\nI once was lost, but now am found;\nWas blind, but now I see.',
-    '’Twas grace that taught my heart to fear,\nAnd grace my fears relieved;\nHow precious did that grace appear\nThe hour I first believed.',
-    'Through many dangers, toils and snares,\nI have already come;\n’Tis grace hath brought me safe thus far,\nAnd grace will lead me home.',
-    'The Lord has promised good to me,\nHis Word my hope secures;\nHe will my Shield and Portion be,\nAs long as life endures.',
-    'Yea, when this flesh and heart shall fail,\nAnd mortal life shall cease,\nI shall possess, within the veil,\nA life of joy and peace.',
-    'When we’ve been there ten thousand years,\nBright shining as the sun,\nWe’ve no less days to sing God’s praise\nThan when we’d first begun.',
-  ] },
+  {
+    title: 'Amazing Grace', author: 'John Newton', tag: 'Hymn', lyrics: [
+      'Amazing grace! How sweet the sound\nThat saved a wretch like me!\nI once was lost, but now am found;\nWas blind, but now I see.',
+      '’Twas grace that taught my heart to fear,\nAnd grace my fears relieved;\nHow precious did that grace appear\nThe hour I first believed.',
+      'Through many dangers, toils and snares,\nI have already come;\n’Tis grace hath brought me safe thus far,\nAnd grace will lead me home.',
+      'The Lord has promised good to me,\nHis Word my hope secures;\nHe will my Shield and Portion be,\nAs long as life endures.',
+      'Yea, when this flesh and heart shall fail,\nAnd mortal life shall cease,\nI shall possess, within the veil,\nA life of joy and peace.',
+      'When we’ve been there ten thousand years,\nBright shining as the sun,\nWe’ve no less days to sing God’s praise\nThan when we’d first begun.',
+    ]
+  },
   { title: 'Holy, Holy, Holy', author: 'Reginald Heber', tag: 'Hymn', lyrics: ['Holy, holy, holy! Lord God Almighty!\nEarly in the morning our song shall rise to Thee.\nHoly, holy, holy! Merciful and mighty!\nGod in three Persons, blessed Trinity!', 'Holy, holy, holy! All the saints adore Thee,\nCasting down their golden crowns around the glassy sea;\nCherubim and seraphim falling down before Thee,\nWhich wert, and art, and evermore shalt be.'] },
   { title: 'Be Thou My Vision', author: 'Traditional Irish hymn', tag: 'Worship', lyrics: ['Be Thou my vision, O Lord of my heart;\nNaught be all else to me, save that Thou art.\nThou my best thought, by day or by night,\nWaking or sleeping, Thy presence my light.', 'Be Thou my wisdom, and Thou my true word;\nI ever with Thee and Thou with me, Lord;\nThou my great Father, I Thy true son;\nThou in me dwelling, and I with Thee one.'] },
   { title: 'It Is Well with My Soul', author: 'Horatio Spafford', tag: 'Hymn', lyrics: ['When peace like a river attendeth my way,\nWhen sorrows like sea billows roll;\nWhatever my lot, Thou hast taught me to say,\nIt is well, it is well with my soul.', 'It is well with my soul,\nIt is well, it is well with my soul.'] },
@@ -23,10 +25,98 @@ export const chapters: Record<string, { chapter: number; verses: string[] }> = {
   Romans: { chapter: 8, verses: ['There is therefore now no condemnation to them which are in Christ Jesus, who walk not after the flesh, but after the Spirit.', 'For the law of the Spirit of life in Christ Jesus hath made me free from the law of sin and death.'] },
 };
 export const romans28 = 'And we know that all things work together for good to them that love God, to them who are the called according to his purpose.';
-export function songSlides(song: Song): Slide[] { const headings = song.sections ? sectionHeadings(song.sections) : []; return song.lyrics.map((text, i) => ({ id: `${song.title}-${i}`, text, label: song.kind === 'sermon' ? `Slide ${i+1}` : song.sections?.[i]?.chorus ? 'Chorus' : `Verse ${i + 1}`, title: song.title, kind: song.kind ?? 'song', background: song.background, backgroundType: song.backgroundType, heading: song.kind === 'sermon' ? undefined : headings[i], headingStyle: song.kind === 'sermon' ? undefined : song.headerStyle, chorus: song.kind === 'sermon' ? false : song.sections?.[i]?.chorus, formats: song.sections?.[i]?.formats })); }
+export function songSlides(song: Song): Slide[] { const headings = song.sections ? sectionHeadings(song.sections) : []; return song.lyrics.map((text, i) => ({ id: `${song.title}-${i}`, text, label: song.kind === 'sermon' ? `Slide ${i + 1}` : song.sections?.[i]?.chorus ? 'Chorus' : `Verse ${i + 1}`, title: song.title, kind: song.kind ?? 'song', background: song.background, backgroundType: song.backgroundType, heading: song.kind === 'sermon' ? undefined : headings[i], headingStyle: song.kind === 'sermon' ? undefined : song.headerStyle, chorus: song.kind === 'sermon' ? false : song.sections?.[i]?.chorus, formats: song.sections?.[i]?.formats })); }
 export const initialTimeline = [
   { id: 'welcome', title: 'Welcome Walk', subtitle: '5 min', kind: 'media' },
   { id: 'opening', title: 'Amazing Grace', subtitle: '6 slides', kind: 'song' },
   { id: 'reading', title: 'Sermon Reading', subtitle: 'Psalm 23', kind: 'scripture' },
   { id: 'closing', title: 'Closing Prayer', subtitle: '3 min', kind: 'media' },
+];
+
+export interface Slide {
+  id: string;
+  title: string;
+  label?: string;
+  text: string;
+  kind?: 'song' | 'scripture' | 'sermon' | 'media';
+  background?: string;
+  backgroundType?: 'image' | 'video';
+  verses?: Array<{ number: number; text: string }>;
+}
+
+export interface Song {
+  id?: string;
+  title: string;
+  author: string;
+  tag?: string;
+  kind?: 'song' | 'sermon';
+  lyrics: string[];
+}
+
+export interface MediaAsset {
+  id: string;
+  title: string;
+  url: string;
+  type: 'image' | 'video';
+  target: 'scripture' | 'media' | 'both';
+}
+
+const ALL_STILLS: Omit<MediaAsset, 'target'>[] = [
+  { id: 'christmas-golden', title: 'Christmas Spectacular Golden', url: '/backgrounds/stills/Christmas Spectacular Golden - 16x9.jpg', type: 'image' },
+  { id: 'christmas-holiday', title: 'Christmas Spectacular Holiday', url: '/backgrounds/stills/Christmas Spectacular Holiday - 16x9.jpg', type: 'image' },
+  { id: 'christmas-hope', title: 'Christmas Spectacular Hope', url: '/backgrounds/stills/Christmas Spectacular Hope - 16x9.jpg', type: 'image' },
+  { id: 'christmas-luminous', title: 'Christmas Spectacular Luminous', url: '/backgrounds/stills/Christmas Spectacular Luminous - 16x9.jpg', type: 'image' },
+  { id: 'christmas-serene', title: 'Christmas Spectacular Serene', url: '/backgrounds/stills/Christmas Spectacular Serene - 16x9.jpg', type: 'image' },
+  { id: 'christmas-starfield', title: 'Christmas Spectacular Starfield', url: '/backgrounds/stills/Christmas Spectacular Starfield - 16x9.jpg', type: 'image' },
+  { id: 'christmas-starlight', title: 'Christmas Spectacular Starlight', url: '/backgrounds/stills/Christmas Spectacular Starlight - 16x9.jpg', type: 'image' },
+  { id: 'christmas-warm', title: 'Christmas Spectacular Warm', url: '/backgrounds/stills/Christmas Spectacular Warm - 16x9.jpg', type: 'image' },
+  { id: 'colorflow-love', title: 'Colorflow Gradients Love', url: '/backgrounds/stills/Colorflow Gradients Love - 16x9.jpg', type: 'image' },
+  { id: 'colorflow-praise', title: 'Colorflow Gradients Praise', url: '/backgrounds/stills/Colorflow Gradients Praise - 16x9.jpg', type: 'image' },
+  { id: 'colorflow-pure', title: 'Colorflow Gradients Pure', url: '/backgrounds/stills/Colorflow Gradients Pure - 16x9.jpg', type: 'image' },
+  { id: 'echo-moonlight', title: 'Echo Spheres Moonlight', url: '/backgrounds/stills/Echo Spheres Moonlight - 16x9.jpg', type: 'image' },
+  { id: 'echo-party', title: 'Echo Spheres Party', url: '/backgrounds/stills/Echo Spheres Party - 16x9.jpg', type: 'image' },
+  { id: 'paint-blank', title: 'Paint Sweeps Blank', url: '/backgrounds/stills/Paint Sweeps Blank.jpg', type: 'image' },
+  { id: 'paint-burn', title: 'Paint Sweeps Burn', url: '/backgrounds/stills/Paint Sweeps Burn.jpg', type: 'image' },
+  { id: 'paint-dreams', title: 'Paint Sweeps Dreams', url: '/backgrounds/stills/Paint Sweeps Dreams.jpg', type: 'image' },
+  { id: 'paint-evergreen', title: 'Paint Sweeps Evergreen', url: '/backgrounds/stills/Paint Sweeps Evergreen.jpg', type: 'image' },
+  { id: 'paint-field', title: 'Paint Sweeps Field', url: '/backgrounds/stills/Paint Sweeps Field.jpg', type: 'image' },
+  { id: 'paint-final', title: 'Paint Sweeps Final', url: '/backgrounds/stills/Paint Sweeps Final.jpg', type: 'image' },
+  { id: 'paint-forest', title: 'Paint Sweeps Forest', url: '/backgrounds/stills/Paint Sweeps Forest.jpg', type: 'image' },
+  { id: 'paint-forever', title: 'Paint Sweeps Forever', url: '/backgrounds/stills/Paint Sweeps Forever.jpg', type: 'image' },
+  { id: 'paint-fun', title: 'Paint Sweeps Fun', url: '/backgrounds/stills/Paint Sweeps Fun.jpg', type: 'image' },
+  { id: 'paint-gold', title: 'Paint Sweeps Gold', url: '/backgrounds/stills/Paint Sweeps Gold.jpg', type: 'image' },
+  { id: 'paint-hope', title: 'Paint Sweeps Hope', url: '/backgrounds/stills/Paint Sweeps Hope.jpg', type: 'image' },
+  { id: 'paint-joy', title: 'Paint Sweeps Joy', url: '/backgrounds/stills/Paint Sweeps Joy.jpg', type: 'image' },
+  { id: 'paint-king', title: 'Paint Sweeps King', url: '/backgrounds/stills/Paint Sweeps King.jpg', type: 'image' },
+  { id: 'paint-love', title: 'Paint Sweeps Love', url: '/backgrounds/stills/Paint Sweeps Love.jpg', type: 'image' },
+  { id: 'paint-peace', title: 'Paint Sweeps Peace', url: '/backgrounds/stills/Paint Sweeps Peace.jpg', type: 'image' },
+  { id: 'paint-shine', title: 'Paint Sweeps Shine', url: '/backgrounds/stills/Paint Sweeps Shine.jpg', type: 'image' },
+  { id: 'paint-silver', title: 'Paint Sweeps Silver', url: '/backgrounds/stills/Paint Sweeps Silver.jpg', type: 'image' },
+  { id: 'paint-spread', title: 'Paint Sweeps Spread', url: '/backgrounds/stills/Paint Sweeps Spread.jpg', type: 'image' },
+  { id: 'paint-strong', title: 'Paint Sweeps Strong', url: '/backgrounds/stills/Paint Sweeps Strong.jpg', type: 'image' },
+  { id: 'paint-torn', title: 'Paint Sweeps Torn', url: '/backgrounds/stills/Paint Sweeps Torn.jpg', type: 'image' },
+  { id: 'paint-vive', title: 'Paint Sweeps Vive', url: '/backgrounds/stills/Paint Sweeps Vive.jpg', type: 'image' },
+  { id: 'particulas-caindo', title: 'Partículas Caindo', url: '/backgrounds/stills/Partículas caindo (loopável).jpg', type: 'image' },
+  { id: 'red-particles-jpg', title: 'Red Particles', url: '/backgrounds/stills/Red Particles.jpg', type: 'image' },
+  { id: 'red-particles-alt', title: 'Red Particles (Alt)', url: '/backgrounds/stills/red-particles.jpg', type: 'image' },
+  { id: 'refractions-points', title: 'Refractions Points', url: '/backgrounds/stills/Refractions Points - 16x9.jpg', type: 'image' },
+  { id: 'refractions-united', title: 'Refractions United', url: '/backgrounds/stills/Refractions United - 16x9.jpg', type: 'image' },
+  { id: 'retro-glow', title: 'Retro Glow Blaze', url: '/backgrounds/stills/Retro Glow Blaze - 16x9.jpg', type: 'image' },
+  { id: 'sundrift-sunrise', title: 'Sundrift Sunrise', url: '/backgrounds/stills/Sundrift Sunrise - 16x9.jpg', type: 'image' },
+];
+
+const ALL_MOTIONS: Omit<MediaAsset, 'target'>[] = [
+  { id: 'blue-particles-mp4', title: 'Blue Particles', url: '/backgrounds/motion/Blue Particles.mp4', type: 'video' },
+  { id: 'dark-mist-mp4', title: 'Dark Mist', url: '/backgrounds/motion/Dark Mist.mp4', type: 'video' },
+  { id: 'green-particles-mp4', title: 'Green Particles', url: '/backgrounds/motion/Green Particles.mp4', type: 'video' },
+];
+
+export const SCRIPTURE_BACKGROUNDS: MediaAsset[] = [
+  ...ALL_MOTIONS.map((item) => ({ ...item, target: 'scripture' as const })),
+  ...ALL_STILLS.map((item) => ({ ...item, target: 'scripture' as const })),
+];
+
+export const MEDIA_BACKGROUNDS: MediaAsset[] = [
+  ...ALL_MOTIONS.map((item) => ({ ...item, target: 'media' as const })),
+  ...ALL_STILLS.map((item) => ({ ...item, target: 'media' as const })),
 ];
