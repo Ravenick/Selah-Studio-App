@@ -2,6 +2,7 @@
 
 # compiled output
 dist
+/artifacts/selah-studio/public/models/whisper-tiny.en/
 tmp
 out-tsc
 *.tsbuildinfo

@@ -61,6 +61,14 @@ router.get("/scripture", async (req, res): Promise<void> => {
         res.status(404).json({ error: "The requested passage was not found." });
         return;
       }
+      if (response.status === 401) {
+        res.status(401).json({ error: "API.Bible rejected the server API key." });
+        return;
+      }
+      if (response.status === 403) {
+        res.status(403).json({ error: "This API.Bible key does not have access to the selected translation." });
+        return;
+      }
       res.status(502).json({ error: "The requested passage could not be loaded." });
       return;
     }

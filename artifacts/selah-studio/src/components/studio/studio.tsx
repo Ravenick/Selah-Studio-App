@@ -1191,7 +1191,13 @@ export function Studio() {
       setLookupError('');
     }).catch((error: unknown) => {
       if (requestId !== sequenceRequestId.current) return;
-      setLookupError(error instanceof Error ? error.message : `Could not load ${selectedTranslation}.`);
+      if (error instanceof TypeError) {
+        setLookupError(isTauri() && !import.meta.env.DEV
+          ? 'Could not reach the scripture API service. Set VITE_TAURI_API_BASE_URL to your deployed API service when building the desktop app.'
+          : 'Could not reach the scripture API server. Start it with “pnpm dev:all” and check VITE_API_BASE_URL.');
+      } else {
+        setLookupError(error instanceof Error ? error.message : `Could not load ${selectedTranslation}.`);
+      }
     });
   }, [selectedTranslation]);
 
@@ -1532,8 +1538,23 @@ export function Studio() {
                 title="Hold Space or click to speak Bible verse"
               >
                 <Mic size={14} />
-                <span>{voice.transcribing ? 'Transcribing…' : listening ? 'Listening…' : 'Push to Talk'}</span>
+                <span>{voice.status || (voice.transcribing ? 'Preparing…' : listening ? 'Listening…' : 'Push to Talk')}</span>
               </button>
+              <div className="ml-2 flex items-center rounded-full border border-white/10 bg-black/20 p-0.5" aria-label="Speech recognition mode">
+                {(['offline', 'online'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={voice.mode === mode}
+                    onClick={() => voice.setMode(mode)}
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-semibold capitalize transition-colors ${voice.mode === mode ? 'bg-primary/20 text-primary' : 'text-slate-400 hover:text-white'}`}
+                    title={mode === 'offline' ? 'Runs Whisper on this device; downloads its model once' : 'Uses the configured transcription API'}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+              {voice.error && <span role="alert" className="ml-2 max-w-56 text-[11px] text-rose-300">{voice.error}</span>}
             </div>
           </div>
 

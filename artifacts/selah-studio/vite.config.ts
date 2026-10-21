@@ -5,8 +5,11 @@ import { defineConfig } from 'vite';
 
 import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
 
-// Replit injects PORT/BASE_PATH. Local Tauri builds and Vercel builds do not.
-const rawPort = process.env.PORT ?? '1420';
+// Replit injects PORT. Locally, PORT belongs to the API server (.env uses 3000),
+// so Vite must keep its own port to avoid colliding with that server.
+const rawPort = process.env.REPL_ID !== undefined
+  ? process.env.PORT ?? '1420'
+  : process.env.VITE_PORT ?? '1420';
 const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {
@@ -19,7 +22,7 @@ export default defineConfig({
   base: basePath,
   envDir: path.resolve(import.meta.dirname, '..', '..'),
   // Only expose client configuration. Never bundle provider credentials.
-  envPrefix: ['VITE_API_BASE_URL', 'VITE_SCRIPTURE_BIBLE_ID', 'VITE_BIBLE_ID_'],
+  envPrefix: ['VITE_API_BASE_URL', 'VITE_TAURI_API_BASE_URL', 'VITE_SCRIPTURE_BIBLE_ID', 'VITE_BIBLE_ID_'],
   plugins: [
     react(),
     tailwindcss(),
@@ -60,6 +63,12 @@ export default defineConfig({
     strictPort: true,
     host: '0.0.0.0',
     allowedHosts: true,
+    proxy: {
+      '/api': {
+        target: process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:3000',
+        changeOrigin: true,
+      },
+    },
     fs: {
       strict: true,
     },

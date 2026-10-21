@@ -4,7 +4,7 @@
   "license": "MIT",
   "scripts": {
     "preinstall": "node -e \"if (!/pnpm/.test(process.env.npm_config_user_agent || '')) { console.error('Use pnpm instead'); process.exit(1); }\"",
-    "dev": "pnpm --filter @workspace/selah-studio run dev",
+    "dev": "pnpm run dev:all",
     "dev:studio": "pnpm --filter @workspace/selah-studio run dev",
     "dev:api": "pnpm --filter @workspace/api-server run dev",
     "dev:all": "pnpm --parallel -r --filter @workspace/selah-studio --filter @workspace/api-server run dev",

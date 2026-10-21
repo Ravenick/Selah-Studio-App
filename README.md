@@ -6,11 +6,10 @@ Selah Studio is an offline-first church presentation app for preparing songs, se
 
 ```sh
 pnpm install
-pnpm --filter @workspace/api-server run dev
-pnpm --filter @workspace/selah-studio run dev
+pnpm dev
 ```
 
-The shared API server must be running for uncached API.Bible passages and server-side Whisper transcription. The studio itself and all local presentation data work without an account or SQL database.
+`pnpm dev` starts the studio and API server together. `pnpm dev:studio` starts only the frontend. Online Bible versions and online speech recognition need the API server; KJV and offline speech recognition run on the device.
 
 ## Local data and offline behavior
 
@@ -34,11 +33,11 @@ The public-hymn search reads the bundled `artifacts/selah-studio/public/openhymn
 
 ## Speech input
 
-On the web, push-to-talk uses the browser Speech Recognition API when available. Tauri and unsupported browsers record audio and send it to the API server, which tries Hugging Face Whisper models one at a time in this order: `openai/whisper-tiny`, `openai/whisper-base`, `openai/whisper-small`, then `openai/whisper-medium`. Transcription requires an internet connection.
+Push-to-talk defaults to Offline mode and uses Whisper Tiny English through Transformers.js and WebAssembly. Production builds download and bundle the quantized model, so speech recognition is available offline from the first launch. Development downloads and caches the model the first time Offline mode is used. The existing speech-reference parser converts recognized words into Bible references, and KJV passages load from the bundled Bible data. Online mode records audio and sends it to the API server for Hugging Face transcription. The model build step includes the upstream Whisper license with the bundled model files.
 
 ## Provider credentials
 
-The API server reads `API_BIBLE_KEY` and `HF_ACCESS_TOKEN` from Replit Secrets. Do not add these values to `VITE_*` variables, source files, or the frontend bundle. If hosting the frontend separately, configure `VITE_API_BASE_URL` to point to the API server; configure the provider secrets on that server as well.
+The API server reads `API_BIBLE_KEY` and `HF_ACCESS_TOKEN` from its environment. Do not add these values to `VITE_*` variables, source files, or the frontend bundle. For a hosted web frontend, configure `VITE_API_BASE_URL` to point to the API server, or serve the API on the same origin. Desktop release builds need `VITE_TAURI_API_BASE_URL` set to a deployed API service; keep provider credentials on that service. API.Bible access to NIV, NKJV, and NLT depends on the account's license and available Bible IDs.
 
 ## Desktop and releases
 

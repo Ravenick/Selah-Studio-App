@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "studio.selah.app",
   "build": {
-    "beforeDevCommand": "pnpm run dev:tauri:web",
+    "beforeDevCommand": "pnpm --dir ../.. run dev:all",
     "devUrl": "http://localhost:1420/studio",
     "beforeBuildCommand": "pnpm run build:tauri:web",
     "frontendDist": "../dist/public"
