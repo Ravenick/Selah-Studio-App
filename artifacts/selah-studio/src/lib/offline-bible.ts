@@ -230,34 +230,38 @@ export async function searchOfflineBible(query: string, limit = 12): Promise<Sea
     ...allBooks.filter((b) => !PRIORITY_BOOKS.includes(b)),
   ];
 
-  const results: SearchVerseResult[] = [];
+  const scored: Array<{ result: SearchVerseResult; score: number }> = [];
   const words = clean.split(/\s+/).filter(Boolean);
 
-  for (const book of searchOrder) {
-    if (results.length >= limit) break;
-    const data = await loadOfflineBook(book);
+  const booksData = await Promise.all(searchOrder.map((book) => loadOfflineBook(book)));
+  for (let bookIndex = 0; bookIndex < searchOrder.length; bookIndex += 1) {
+    const book = searchOrder[bookIndex]!;
+    const data = booksData[bookIndex];
     if (!data) continue;
 
     for (const ch of data.chapters) {
-      if (results.length >= limit) break;
       const chapterNum = Number(ch.chapter);
       for (const v of ch.verses) {
         const lowerText = v.text.toLowerCase();
-        // check if all words match or the full phrase matches
-        const isMatch = lowerText.includes(clean) || (words.length > 1 && words.every((w) => lowerText.includes(w)));
+        const phraseMatch = lowerText.includes(clean);
+        const matchedWords = words.filter((word) => lowerText.includes(word)).length;
+        const isMatch = phraseMatch || (words.length > 1 && matchedWords === words.length);
         if (isMatch) {
-          results.push({
-            reference: `${book} ${chapterNum}:${v.verse}`,
-            book,
-            chapter: chapterNum,
-            verse: Number(v.verse),
-            text: v.text,
+          scored.push({
+            result: {
+              reference: `${book} ${chapterNum}:${v.verse}`,
+              book,
+              chapter: chapterNum,
+              verse: Number(v.verse),
+              text: v.text,
+            },
+            score: phraseMatch ? 2 : 1,
           });
-          if (results.length >= limit) break;
         }
       }
     }
   }
 
-  return results;
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map(({ result }) => result);
 }

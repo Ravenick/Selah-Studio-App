@@ -48,7 +48,6 @@
         ],
         "name": "Selah Studio Schedule",
         "description": "Selah Studio Worship Service Schedule File",
-        "icon": "icons/icon.ico",
         "role": "Editor"
       }
     ]

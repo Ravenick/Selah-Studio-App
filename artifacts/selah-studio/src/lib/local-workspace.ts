@@ -19,6 +19,8 @@ export type WorkspacePreferences = {
   autoPush: boolean;
   scriptureBackground: string;
   scriptureBackgroundType: 'image' | 'video';
+  mediaBackground: string;
+  mediaBackgroundType: 'image' | 'video';
   outputName: string;
 };
 
@@ -97,6 +99,8 @@ export async function readWorkspacePreferences(): Promise<Partial<WorkspacePrefe
       ...(typeof parsed.autoPush === 'boolean' ? { autoPush: parsed.autoPush } : {}),
       ...(typeof parsed.scriptureBackground === 'string' ? { scriptureBackground: parsed.scriptureBackground } : {}),
       ...(parsed.scriptureBackgroundType === 'image' || parsed.scriptureBackgroundType === 'video' ? { scriptureBackgroundType: parsed.scriptureBackgroundType } : {}),
+      ...(typeof parsed.mediaBackground === 'string' ? { mediaBackground: parsed.mediaBackground } : {}),
+      ...(parsed.mediaBackgroundType === 'image' || parsed.mediaBackgroundType === 'video' ? { mediaBackgroundType: parsed.mediaBackgroundType } : {}),
       ...(typeof parsed.outputName === 'string' ? { outputName: parsed.outputName } : {}),
     };
   } catch {

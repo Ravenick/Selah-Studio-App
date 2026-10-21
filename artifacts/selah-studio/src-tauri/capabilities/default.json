@@ -17,6 +17,12 @@
         },
         {
           "path": "$DOCUMENT/SelahStudio/Assets/**"
+        },
+        {
+          "path": "$DOCUMENT/SelahStudio/Schedules"
+        },
+        {
+          "path": "$DOCUMENT/SelahStudio/Schedules/**"
         }
       ]
     }

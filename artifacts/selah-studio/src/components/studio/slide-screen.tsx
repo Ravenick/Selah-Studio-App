@@ -249,11 +249,9 @@ export function SlideScreen({
     frame.contentWindow.postMessage(JSON.stringify({ event: 'command', func: audioMuted ? 'mute' : 'unMute', args: [] }), '*');
   }, [audioMuted, resolvedMedia, slide.id, slide.mediaType]);
 
-  const background = slide.kind === 'scripture'
-    ? '/backgrounds/stills/Echo Spheres Party - 16x9.jpg'
-    : resolvedBackground || slide.background;
+  const background = resolvedBackground || slide.background || (slide.kind === 'scripture' ? '/backgrounds/stills/Echo Spheres Party - 16x9.jpg' : undefined);
   const hasBackground = Boolean(background && !isLocalAsset(background));
-  const isBackgroundVideo = slide.kind !== 'scripture' && (slide.backgroundType === 'video' || Boolean(background && /\.(mp4|webm|mov)(\?|$)/i.test(background)));
+  const isBackgroundVideo = slide.backgroundType === 'video' || Boolean(background && /\.(mp4|webm|mov)(\?|$)/i.test(background));
   const isStandaloneMedia = slide.kind === 'media' && Boolean(slide.mediaUrl);
   const youtubeEmbed = slide.mediaType === 'youtube' && resolvedMedia ? youtubeUrlForEmbed(resolvedMedia) : '';
 

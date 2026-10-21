@@ -78,7 +78,6 @@ import {
 import { getGetScriptureQueryKey, getScripture, useGetScripture } from '@workspace/api-client-react';
 import { usePushToTalk } from '@/hooks/use-push-to-talk';
 import { parseBibleContent } from '@/lib/scripture-content';
-import { searchPublicHymns, type PublicHymn } from '@/lib/song-search';
 import {
   searchOfflineBible,
   fetchOfflinePassage,
@@ -89,6 +88,10 @@ import {
 } from '@/lib/offline-bible';
 import { parseSpokenBibleReference, type ParsedSpokenReference } from '@/lib/spoken-bible-parser';
 import { PRESENTATION_COLORS, saveScriptureAppearance, useScriptureAppearance } from '@/lib/scripture-appearance';
+
+import { isTauri } from '@tauri-apps/api/core';
+import { BaseDirectory } from '@tauri-apps/api/path';
+import { mkdir, writeTextFile } from '@tauri-apps/plugin-fs';
 
 const logo = { url: '/selah-logo.png' };
 const DEFAULT_BIBLE_ID = import.meta.env.VITE_SCRIPTURE_BIBLE_ID || 'de4e12af7f28f599-01';
@@ -156,13 +159,13 @@ const initialScripture: Slide = {
 
 function compileMappedScripture(book: string, chapter: string, verses: string[], numbers: number[]): Slide[] {
   const canonicalBook = book === 'Psalms' ? 'Psalm' : book;
-  const total = verses.length;
+  const abbreviation = (bibleCodes[book] ?? book.slice(0, 3)).replace(/^(.)(.*)$/, (_, first, rest) => first + rest.toLowerCase());
   return verses.map((verseText, index) => {
     const verseNum = numbers[index] ?? (index + 1);
     return {
       id: `${book}-${chapter}-${verseNum}`,
       title: `${canonicalBook} ${chapter}:${verseNum}`,
-      label: total > 1 ? `Verse ${verseNum} (${index + 1}/${total})` : `Verse ${verseNum}`,
+      label: `${abbreviation} ${chapter}:${verseNum}`,
       kind: 'scripture',
       text: verseText,
       verses: [{ number: verseNum, text: verseText }],
@@ -214,6 +217,10 @@ export function Studio() {
   // Custom uploaded backgrounds state
   const [customScriptureBgs, setCustomScriptureBgs] = useState<MediaAsset[]>([]);
   const [customMediaBgs, setCustomMediaBgs] = useState<MediaAsset[]>([]);
+  const availableBackgrounds = Array.from(new Map(
+    [...customScriptureBgs, ...customMediaBgs, ...SCRIPTURE_BACKGROUNDS, ...MEDIA_BACKGROUNDS]
+      .map((asset) => [asset.url, asset] as const),
+  ).values());
   // Media Explorer Modal State
   const [isMediaExplorerOpen, setIsMediaExplorerOpen] = useState(false);
   const [mediaBackground, setMediaBackground] = useState('/backgrounds/motion/Blue Particles.mp4');
@@ -274,7 +281,7 @@ export function Studio() {
       const stored = await stashBackground(file);
       const mediaSlide: Slide = {
         id: `media-${stored.id}`,
-        title: file.name.replace(/\.[^/.]+$/, ''),
+        title: file.name,
         label: isVideo ? 'Video' : 'Image',
         text: '',
         kind: 'media',
@@ -328,7 +335,7 @@ export function Studio() {
 
   function removeDeckMedia(index: number) {
     const item = mediaDeckSlides[index];
-    if (!item || item.kind !== 'media' || !item.mediaUrl) return;
+    if (!item) return;
     const nextDeck = mediaDeckSlides.filter((_, i) => i !== index);
     const nextSlides = slides.filter((slide) => slide.id !== item.id);
     setMediaDeckSlides(nextDeck);
@@ -339,7 +346,7 @@ export function Studio() {
     if (nextDeck[nextIndex]) loadPreview(nextDeck[nextIndex]);
     setEditingSlideIdx(null);
     setIsDirty(true);
-    setNotice(`Removed “${item.title}” from the presentation deck. The saved asset remains in local storage.`);
+    setNotice(`Removed “${item.title}” from the presentation deck.`);
   }
 
   function addYoutubeMedia() {
@@ -406,14 +413,28 @@ export function Studio() {
     }
   }, []);
 
+  function rememberSchedule(payload: any) {
+    const entry = {
+      id: `${payload.name || 'Service Schedule'}-${payload.timestamp || Date.now()}`,
+      name: payload.name || 'Service Schedule',
+      savedAt: new Date(payload.timestamp || Date.now()).toLocaleString(),
+      payload,
+    };
+    setRecentSchedules((current) => {
+      const next = [entry, ...current.filter((item) => item.name !== entry.name)].slice(0, 12);
+      try { localStorage.setItem('selah-recent-schedules', JSON.stringify(next)); } catch { /* Storage may be unavailable in a restricted webview. */ }
+      return next;
+    });
+  }
+
   // Save Schedule to computer (.selah JSON)
   async function handleSaveSchedule() {
     const payload = {
       version: '1.0',
       timestamp: new Date().toISOString(),
       name: currentScheduleName,
-      slides,
-      mediaDeckSlides,
+      slides: slides.filter((slide) => slide.kind !== 'media' || slide.mediaType === 'youtube'),
+      mediaDeckSlides: mediaDeckSlides.filter((slide) => slide.kind !== 'media' || slide.mediaType === 'youtube'),
       song,
       scriptureBackground,
       mediaBackground,
@@ -422,6 +443,22 @@ export function Studio() {
     };
 
     const jsonString = JSON.stringify(payload, null, 2);
+
+    if (isTauri()) {
+      try {
+        const safeName = currentScheduleName.trim().replace(/[<>:"/\\|?*]/g, '-').replace(/\.+$/g, '') || 'Service Schedule';
+        const folder = 'SelahStudio/Schedules';
+        await mkdir(folder, { baseDir: BaseDirectory.Document, recursive: true });
+        await writeTextFile(`${folder}/${safeName}.selah`, jsonString, { baseDir: BaseDirectory.Document });
+        rememberSchedule(payload);
+        setIsDirty(false);
+        setNotice(`Schedule saved to Documents/${folder}/${safeName}.selah.`);
+      } catch (error) {
+        console.error('Could not save schedule to the Selah Studio schedules folder.', error);
+        setNotice('Could not save the schedule in Documents/SelahStudio/Schedules.');
+      }
+      return;
+    }
 
     // Native OS File Save Dialog (Tauri & Web File System API)
     if ('showSaveFilePicker' in window) {
@@ -439,6 +476,8 @@ export function Studio() {
         await writable.write(jsonString);
         await writable.close();
 
+        rememberSchedule(payload);
+
         setIsDirty(false);
         setNotice(`Schedule saved successfully.`);
         return;
@@ -455,6 +494,7 @@ export function Studio() {
     a.download = `${currentScheduleName}.selah`;
     a.click();
     URL.revokeObjectURL(url);
+    rememberSchedule(payload);
     setIsDirty(false);
   }
 
@@ -463,6 +503,8 @@ export function Studio() {
     if (payload.slides) setSlides(payload.slides);
     if (payload.mediaDeckSlides) setMediaDeckSlides(payload.mediaDeckSlides);
     if (payload.song) setSong(payload.song);
+    if (payload.scriptureBackground) setScriptureBackground(payload.scriptureBackground);
+    if (payload.scriptureBackgroundType) setScriptureBackgroundType(payload.scriptureBackgroundType);
     if (payload.mediaBackground) setMediaBackground(payload.mediaBackground);
     if (payload.mediaBackgroundType) setMediaBackgroundType(payload.mediaBackgroundType);
     if (payload.name) setCurrentScheduleName(payload.name);
@@ -470,6 +512,7 @@ export function Studio() {
     setSelected(0);
     setSelectedMediaDeckIdx(0);
     setIsDirty(false);
+    rememberSchedule(payload);
     setNotice(`Loaded schedule "${payload.name}"`);
   }
 
@@ -488,25 +531,65 @@ export function Studio() {
     };
     reader.readAsText(file);
   }
-  // Hymn Search
-  const [publicHymnSearch, setPublicHymnSearch] = useState(false);
-  const [publicHymnResults, setPublicHymnResults] = useState<PublicHymn[]>([]);
-  const [publicHymnStatus, setPublicHymnStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
 
   // Background Selection
   // Default Constant Backgrounds
-  const scriptureBackground = '/backgrounds/stills/Echo Spheres Party - 16x9.jpg';
-  const scriptureBackgroundType = 'image' as const;
+  const [scriptureBackground, setScriptureBackground] = useState('/backgrounds/stills/Echo Spheres Party - 16x9.jpg');
+  const [scriptureBackgroundType, setScriptureBackgroundType] = useState<'image' | 'video'>('image');
 
 
   // Scripture Keyword & Full-text Search
   const [scriptureSearchQuery, setScriptureSearchQuery] = useState('');
   const [scriptureSearchResults, setScriptureSearchResults] = useState<SearchVerseResult[]>([]);
   const [isSearchingScripture, setIsSearchingScripture] = useState(false);
+  const [scriptureSearchOpen, setScriptureSearchOpen] = useState(false);
+  const [activeSearchResult, setActiveSearchResult] = useState(0);
+  const scriptureSearchInputRef = useRef<HTMLInputElement>(null);
+  const scriptureSearchRequest = useRef(0);
   const [selectedTranslation, setSelectedTranslation] = useState<string>('KJV');
   const scriptureAppearance = useScriptureAppearance();
   const scriptureRequestId = useRef(0);
   const sequenceRequestId = useRef(0);
+
+  useEffect(() => {
+    const query = scriptureSearchQuery.trim();
+    const requestId = ++scriptureSearchRequest.current;
+    if (query.length < 2) {
+      setScriptureSearchResults([]);
+      setIsSearchingScripture(false);
+      return;
+    }
+    setIsSearchingScripture(true);
+    const timer = window.setTimeout(() => {
+      void searchOfflineBible(query, 100).then((results) => {
+        if (requestId !== scriptureSearchRequest.current) return;
+        setScriptureSearchResults(results);
+        setActiveSearchResult(0);
+        setIsSearchingScripture(false);
+      }).catch(() => {
+        if (requestId !== scriptureSearchRequest.current) return;
+        setScriptureSearchResults([]);
+        setIsSearchingScripture(false);
+      });
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [scriptureSearchQuery]);
+
+  useEffect(() => {
+    const dismissSearch = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target === scriptureSearchInputRef.current || target.closest('.scripture-results-dropdown')) return;
+      setScriptureSearchOpen(false);
+    };
+    document.addEventListener('pointerdown', dismissSearch);
+    return () => document.removeEventListener('pointerdown', dismissSearch);
+  }, []);
+
+  useEffect(() => {
+    if (!scriptureSearchOpen || scriptureSearchResults.length === 0) return;
+    document.getElementById(`scripture-search-result-${activeSearchResult}`)?.scrollIntoView({ block: 'nearest' });
+  }, [activeSearchResult, scriptureSearchOpen, scriptureSearchResults.length]);
 
   // Surrounding Sequence Engine
   const [sequenceVerses, setSequenceVerses] = useState<SequenceVerseItem[]>([]);
@@ -529,7 +612,8 @@ export function Studio() {
   const timelineSlides = useRef<Record<string, Slide[]>>({});
   const restoredCanvas = useRef<Slide[] | null>(null);
   const deckCardsRef = useRef<(HTMLDivElement | null)[]>([]);
-  const [librarySongs, setLibrarySongs] = useState(songs);
+  const [librarySongs, setLibrarySongs] = useState<Song[]>([]);
+  const [pendingLibrarySong, setPendingLibrarySong] = useState<Song | null>(null);
   const [bookFocused, setBookFocused] = useState(false);
   const [invalidField, setInvalidField] = useState('');
   const bookInput = useRef<HTMLInputElement>(null);
@@ -537,12 +621,12 @@ export function Studio() {
   const [tab, setTab] = useState('Songs');
   const [search, setSearch] = useState('');
   const [song, setSong] = useState<Song>(defaultSong);
-  const [slides, setSlides] = useState<Slide[]>(songSlides(defaultSong).map((slide) => ({ ...slide, background: '/backgrounds/motion/Blue Particles.mp4', backgroundType: 'video' })));
+  const [slides, setSlides] = useState<Slide[]>([]);
   const [selected, setSelected] = useState(0);
 
   // Dedicated Media Presentation Deck states
-  const [mediaDeckSlides, setMediaDeckSlides] = useState<Slide[]>(songSlides(defaultSong).map((slide) => ({ ...slide, background: '/backgrounds/motion/Blue Particles.mp4', backgroundType: 'video' })));
-  const [selectedMediaDeckIdx, setSelectedMediaDeckIdx] = useState<number | null>(0);
+  const [mediaDeckSlides, setMediaDeckSlides] = useState<Slide[]>([]);
+  const [selectedMediaDeckIdx, setSelectedMediaDeckIdx] = useState<number | null>(null);
   const [output, setOutput] = useState<OutputState>(() => {
     try {
       const cached = localStorage.getItem('selah-projector-latest');
@@ -642,6 +726,10 @@ export function Studio() {
         ]);
         setTheme(accent);
         if (preferences.autoPush !== undefined) setAutoPush(preferences.autoPush);
+        if (preferences.scriptureBackground) setScriptureBackground(preferences.scriptureBackground);
+        if (preferences.scriptureBackgroundType) setScriptureBackgroundType(preferences.scriptureBackgroundType);
+        if (preferences.mediaBackground) setMediaBackground(preferences.mediaBackground);
+        if (preferences.mediaBackgroundType) setMediaBackgroundType(preferences.mediaBackgroundType);
         if (preferences.outputName) setOutputName(preferences.outputName);
         setThemeLoaded(true);
         setPreferencesLoaded(true);
@@ -758,6 +846,7 @@ export function Studio() {
     setVerse(String(result.verse));
     setScriptureSearchQuery('');
     setScriptureSearchResults([]);
+    setScriptureSearchOpen(false);
 
     let title = result.reference;
     let text = result.text;
@@ -885,6 +974,10 @@ export function Studio() {
       // Enter key pushes current slide live
       if (e.key === 'Enter') {
         e.preventDefault();
+        if (tab !== 'Scriptures' && pendingLibrarySong) {
+          loadSong(pendingLibrarySong);
+          return;
+        }
         if (tab === 'Scriptures' && highlightedVerses.length > 0) {
           displayHighlightedVerses(autoPush);
           return;
@@ -948,6 +1041,7 @@ export function Studio() {
     }));
 
     setSong(item);
+    setPendingLibrarySong(null);
     setSlides(generatedSlides);
     setMediaDeckSlides(generatedSlides);
     setSelectedMediaDeckIdx(0);
@@ -1044,7 +1138,7 @@ export function Studio() {
   function pickBook(value: string) {
     const match = resolveBook(value);
     if (!match) {
-      setInvalidField('book');
+      shakeField('book');
       return false;
     }
     setBook(match);
@@ -1053,6 +1147,17 @@ export function Studio() {
     setInvalidField('');
     setBookFocused(false);
     return true;
+  }
+
+  function focusAndSelect(input: HTMLInputElement | null) {
+    if (!input) return;
+    input.focus();
+    window.requestAnimationFrame(() => input.select());
+  }
+
+  function shakeField(field: string) {
+    setInvalidField(field);
+    window.setTimeout(() => setInvalidField((current) => current === field ? '' : current), 600);
   }
 
   const loadSequence = useCallback((b: string, c: string | number, highlightRange?: number[]) => {
@@ -1219,10 +1324,31 @@ export function Studio() {
     }, 10);
   }
 
-  // Set Scripture Background
-  // Persistent Scripture Background Chooser
-  function chooseScriptureBackground(_asset: MediaAsset) {
-    setIsMediaExplorerOpen(false);
+  function persistBackgroundChoices(nextScripture = scriptureBackground, nextScriptureType = scriptureBackgroundType, nextMedia = mediaBackground, nextMediaType = mediaBackgroundType) {
+    void saveWorkspacePreferences({
+      autoPush,
+      scriptureBackground: nextScripture,
+      scriptureBackgroundType: nextScriptureType,
+      mediaBackground: nextMedia,
+      mediaBackgroundType: nextMediaType,
+      outputName,
+    });
+  }
+
+  function chooseScriptureBackground(asset: MediaAsset) {
+    setScriptureBackground(asset.url);
+    setScriptureBackgroundType(asset.type);
+    setSlides((items) => items.map((slide) => slide.kind === 'scripture' ? { ...slide, background: asset.url, backgroundType: asset.type } : slide));
+    setMediaDeckSlides((items) => items.map((slide) => slide.kind === 'scripture' ? { ...slide, background: asset.url, backgroundType: asset.type } : slide));
+    setOutput((current) => current.slide.kind === 'scripture' ? { ...current, slide: { ...current.slide, background: asset.url, backgroundType: asset.type } } : current);
+    if (slides[selected]?.kind === 'scripture') {
+      const updated = { ...slides[selected]!, background: asset.url, backgroundType: asset.type };
+      loadPreview(updated);
+      if (autoPush) broadcast(updated);
+    }
+    persistBackgroundChoices(asset.url, asset.type);
+    setIsDirty(true);
+    setNotice(`Scripture background set to ${asset.title}.`);
   }
 
   // Set Song / Sermon Background
@@ -1248,7 +1374,27 @@ export function Studio() {
     setOutput((current) => current.slide.kind === 'song' || current.slide.kind === 'sermon'
       ? { ...current, slide: { ...current.slide, background: asset.url, backgroundType: asset.type } }
       : current);
+    if (slides[selected] && (slides[selected]!.kind === 'song' || slides[selected]!.kind === 'sermon')) {
+      const updated = { ...slides[selected]!, background: asset.url, backgroundType: asset.type };
+      loadPreview(updated);
+      if (autoPush) broadcast(updated);
+    }
+    persistBackgroundChoices(scriptureBackground, scriptureBackgroundType, asset.url, asset.type);
     setIsDirty(true);
+    setNotice(`Song and sermon background set to ${asset.title}.`);
+  }
+
+  function renderBackgroundCard(asset: MediaAsset) {
+    const isScripture = scriptureBackground === asset.url;
+    const isSong = mediaBackground === asset.url;
+    return <article className="background-library-card" key={asset.id}>
+      <div className="background-library-thumb">{asset.type === 'video' ? <video src={asset.url} muted autoPlay loop playsInline /> : <img src={asset.url} alt="" />}</div>
+      <strong title={asset.title}>{asset.title}</strong>
+      <div className="background-targets" role="group" aria-label={`Assign ${asset.title} background`}>
+        <button type="button" className={isScripture ? 'active' : ''} aria-pressed={isScripture} onClick={() => chooseScriptureBackground(asset)}><span className="target-radio"/>Scripture</button>
+        <button type="button" className={isSong ? 'active' : ''} aria-pressed={isSong} onClick={() => chooseMediaBackground(asset)}><span className="target-radio"/>Song / Sermon</button>
+      </div>
+    </article>;
   }
 
   function acceptVoiceFeedback(parsed: ParsedSpokenReference) {
@@ -1304,6 +1450,16 @@ export function Studio() {
   function loadTimeline(id: string) {
     const item = timeline.find((t) => t.id === id);
     if (!item) return;
+    if (item.kind === 'song' || item.kind === 'sermon') {
+      const libraryItem = librarySongs.find((entry) => entry.title === item.title);
+      if (libraryItem) {
+        setPendingLibrarySong(libraryItem);
+        setNotice(`Selected “${libraryItem.title}”. Press Enter to load it into the deck.`);
+      } else {
+        setNotice(`“${item.title}” is not in the song and sermon library.`);
+      }
+      return;
+    }
     const saved = timelineSlides.current[id];
     if (saved?.[0]) {
       setSlides(saved);
@@ -1628,47 +1784,7 @@ export function Studio() {
                     >
                       <Plus size={13} /> New Sermon
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs"
-                      onClick={() => setPublicHymnSearch((open) => !open)}
-                    >
-                      <BookOpen size={13} /> {publicHymnSearch ? 'Hide Open Hymnal' : 'Open Hymnal (>1,000)'}
-                    </Button>
                   </div>
-
-                  {publicHymnSearch && (
-                    <div className="cloud-vault">
-                      <div className="builder-label">
-                        PUBLIC DOMAIN HYMNALS <span className="demo-label">OFFLINE ARCHIVE</span>
-                      </div>
-                      {search.trim().length < 2 && (
-                        <p className="hymn-catalog-status">Type 2+ letters in search to query 1,000+ hymns…</p>
-                      )}
-                      {publicHymnStatus === 'loading' && (
-                        <p className="hymn-catalog-status">Searching offline Open Hymnal archive…</p>
-                      )}
-                      {publicHymnResults.map((item) => (
-                        <Button
-                          variant="ghost"
-                          className="cloud-result"
-                          key={item.id}
-                          onClick={() => {
-                            setBuilderMode('song');
-                            setBuilderSong(item);
-                            setBuilderOpen(true);
-                          }}
-                        >
-                          <span>
-                            <strong>{item.title}</strong>
-                            <small>{item.author} · Open Hymnal</small>
-                          </span>
-                          <Plus size={14} />
-                        </Button>
-                      ))}
-                    </div>
-                  )}
 
                   <div className="song-list flex flex-col gap-1.5 overflow-y-auto max-h-[320px]">
                     {librarySongs
@@ -1676,9 +1792,13 @@ export function Studio() {
                       .map((item) => (
                         <div
                           key={`${item.kind ?? 'song'}:${item.title}`}
-                          className={`song-row flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${song.title === item.title ? 'bg-primary/10 border border-primary/40' : 'hover:bg-white/5 border border-transparent'
+                          className={`song-row flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${pendingLibrarySong?.title === item.title ? 'bg-primary/10 border border-primary/40' : 'hover:bg-white/5 border border-transparent'
                             }`}
-                          onClick={() => loadSong(item)}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Select ${item.kind === 'sermon' ? 'sermon' : 'song'} ${item.title}; press Enter to load`}
+                          onClick={() => setPendingLibrarySong(item)}
+                          onKeyDown={(event) => { if (event.target === event.currentTarget && event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); loadSong(item); } }}
                         >
                           <div className="flex items-center gap-2.5 truncate">
                             <span className="song-icon text-primary">
@@ -1773,26 +1893,47 @@ export function Studio() {
                     <label className="search-input">
                       <Search size={15} />
                       <input
+                        ref={scriptureSearchInputRef}
                         aria-label="Search scripture keywords or references"
                         placeholder="e.g. for god so loved, or John 3:16"
                         value={scriptureSearchQuery}
-                        onChange={(e) => setScriptureSearchQuery(e.target.value)}
+                        onFocus={() => setScriptureSearchOpen(true)}
+                        onChange={(e) => { setScriptureSearchQuery(e.target.value); setScriptureSearchOpen(true); setActiveSearchResult(0); }}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter' && scriptureSearchResults[0]) {
+                          if (e.key === 'ArrowDown' && scriptureSearchResults.length) {
                             e.preventDefault();
-                            displaySearchResult(scriptureSearchResults[0], true);
+                            setActiveSearchResult((index) => (index + 1) % scriptureSearchResults.length);
+                          } else if (e.key === 'ArrowUp' && scriptureSearchResults.length) {
+                            e.preventDefault();
+                            setActiveSearchResult((index) => (index - 1 + scriptureSearchResults.length) % scriptureSearchResults.length);
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            setScriptureSearchOpen(false);
+                          } else if (e.key === 'Enter' && scriptureSearchResults[activeSearchResult]) {
+                            e.preventDefault();
+                            displaySearchResult(scriptureSearchResults[activeSearchResult]!, true);
                           }
                         }}
                       />
                     </label>
 
-                    {scriptureSearchResults.length > 0 && (
-                      <div className="scripture-results-dropdown">
-                        {scriptureSearchResults.map((res) => (
+                    {scriptureSearchOpen && isSearchingScripture && (
+                      <div className="scripture-results-dropdown" role="status">Searching all 66 Bible books…</div>
+                    )}
+                    {scriptureSearchOpen && !isSearchingScripture && scriptureSearchQuery.trim().length >= 2 && scriptureSearchResults.length === 0 && (
+                      <div className="scripture-results-dropdown" role="status">No matching verses found.</div>
+                    )}
+                    {scriptureSearchOpen && scriptureSearchResults.length > 0 && (
+                      <div className="scripture-results-dropdown" role="listbox" aria-label="Bible verse search results">
+                        {scriptureSearchResults.map((res, index) => (
                           <button
+                            id={`scripture-search-result-${index}`}
                             key={res.reference}
                             type="button"
-                            className="scripture-result-item"
+                            role="option"
+                            aria-selected={activeSearchResult === index}
+                            className={`scripture-result-item ${activeSearchResult === index ? 'highlighted' : ''}`}
+                            onMouseEnter={() => setActiveSearchResult(index)}
                             onClick={() => displaySearchResult(res, true)}
                           >
                             <strong>{res.reference}</strong>
@@ -1824,16 +1965,20 @@ export function Studio() {
                           const val = event.target.value;
                           setBook(val);
                           setBookFocused(true);
+                          if (val.trim() && matchingBooks(val).length === 0) shakeField('book');
+                          else setInvalidField('');
                         }}
                         onKeyDown={(event) => {
                           if (['Enter', 'Tab', 'ArrowRight'].includes(event.key)) {
-                            event.preventDefault();
                             const matches = matchingBooks(book);
-                            const resolved = matches[0] || resolveBook(book) || book;
-                            setBook(resolved);
-                            pickBook(resolved);
-                            chapterInput.current?.focus();
-                            chapterInput.current?.select();
+                            const resolved = book.trim() ? resolveBook(book) || matches[0] : undefined;
+                            if (!resolved) {
+                              event.preventDefault();
+                              shakeField('book');
+                              return;
+                            }
+                            event.preventDefault();
+                            if (pickBook(resolved)) focusAndSelect(chapterInput.current);
                           }
                         }}
                       />
@@ -1851,9 +1996,7 @@ export function Studio() {
                               onMouseDown={(e) => e.preventDefault()}
                               onClick={() => {
                                 setBook(name);
-                                pickBook(name);
-                                chapterInput.current?.focus();
-                                chapterInput.current?.select();
+                                if (pickBook(name)) focusAndSelect(chapterInput.current);
                               }}
                             >
                               {name}
@@ -1880,9 +2023,8 @@ export function Studio() {
                         if (!/^\d+$/.test(val)) return;
                         const maxCh = getMaxChapters(book);
                         const num = Number(val);
-                        if (num > maxCh) {
-                          setInvalidField('chapter');
-                          setTimeout(() => setInvalidField(''), 600);
+                        if (num < 1 || num > maxCh) {
+                          shakeField('chapter');
                           return;
                         }
                         setInvalidField('');
@@ -1890,14 +2032,16 @@ export function Studio() {
                       }}
                       onKeyDown={(e) => {
                         if (['Enter', 'Tab', 'ArrowRight'].includes(e.key)) {
+                          if (!validChapter(book, chapter)) {
+                            e.preventDefault();
+                            shakeField('chapter');
+                            return;
+                          }
                           e.preventDefault();
-                          if (!chapter || chapter === '0') setChapter('1');
-                          verseInput.current?.focus();
-                          verseInput.current?.select();
+                          focusAndSelect(verseInput.current);
                         } else if (e.key === 'ArrowLeft' && e.currentTarget.selectionStart === 0) {
                           e.preventDefault();
-                          bookInput.current?.focus();
-                          bookInput.current?.select();
+                          focusAndSelect(bookInput.current);
                         }
                       }}
                     />
@@ -1938,8 +2082,7 @@ export function Studio() {
                         }
                         else if (e.key === 'ArrowLeft' && e.currentTarget.selectionStart === 0) {
                           e.preventDefault();
-                          chapterInput.current?.focus();
-                          chapterInput.current?.select();
+                          focusAndSelect(chapterInput.current);
                         }
                       }}
                     />
@@ -2014,6 +2157,16 @@ export function Studio() {
 
               {tab === 'Media' && (
                 <div className="flex flex-col gap-3">
+                  <div className="active-backgrounds-grid">
+                    <div className="active-background-card">
+                      {scriptureBackgroundType === 'video' ? <video src={scriptureBackground} autoPlay loop muted playsInline /> : <img src={scriptureBackground} alt="" />}
+                      <div><span>ACTIVE SCRIPTURE BACKGROUND</span><strong>{scriptureBackground.split('/').pop()}</strong></div>
+                    </div>
+                    <div className="active-background-card">
+                      {mediaBackgroundType === 'video' ? <video src={mediaBackground} autoPlay loop muted playsInline /> : <img src={mediaBackground} alt="" />}
+                      <div><span>ACTIVE SONG / SERMON BACKGROUND</span><strong>{mediaBackground.split('/').pop()}</strong></div>
+                    </div>
+                  </div>
                   <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex flex-col gap-2">
                     <SectionLabel icon={<ImageIcon size={14} />}>ADD STANDALONE MEDIA</SectionLabel>
                     <p className="text-[11px] text-slate-400">Images and videos become their own deck slides. Video uploads are limited to 200 MB.</p>
@@ -2038,27 +2191,6 @@ export function Studio() {
                       ) : null;
                     })()}
                   </div>
-                  {/* Song/Sermon Active Background Card */}
-                  <div className="p-2.5 rounded-lg bg-white/5 border border-white/10 flex flex-col gap-1.5">
-                    <span className="text-[10px] font-bold text-primary uppercase">Active Song/Sermon Background</span>
-                    <div className="flex items-center gap-2">
-                      <div className="w-12 h-8 rounded bg-black/60 border border-white/10 overflow-hidden flex items-center justify-center">
-                        {mediaBackgroundType === 'video' ? (
-                          <video src={mediaBackground} className="w-full h-full object-cover" autoPlay loop muted />
-                        ) : (
-                          <img src={mediaBackground} alt="" className="w-full h-full object-cover" />
-                        )}
-                      </div>
-                      <div className="flex flex-col">
-                        <strong className="text-xs text-slate-200">
-                          {mediaBackground.split('/').pop()}
-                        </strong>
-                        <span className="text-[10px] text-slate-400 capitalize">{mediaBackgroundType} Loop</span>
-                      </div>
-                    </div>
-                  </div>
-
-
                 </div>
               )}
 
@@ -2172,11 +2304,9 @@ export function Studio() {
                           {slideItem.label || `Verse ${index + 1}`}
                         </span>
 
-                        {slideItem.kind === 'media' && slideItem.mediaUrl && (
-                          <button type="button" aria-label={`Remove ${slideItem.title} from deck`} title="Remove from deck" className="text-white/70 hover:text-white hover:bg-rose-500/80 rounded p-1" onClick={(e) => { e.stopPropagation(); removeDeckMedia(index); }}>
-                            <X size={12} />
-                          </button>
-                        )}
+                        <button type="button" aria-label={`Remove ${slideItem.title} from deck`} title="Remove from deck" className="text-white/70 hover:text-white hover:bg-rose-500/80 rounded p-1" onClick={(e) => { e.stopPropagation(); removeDeckMedia(index); }}>
+                          <X size={12} />
+                        </button>
                         {/* Inline Edit Trigger (Disabled on Scripture) */}
                         {!isScripture && slideItem.kind !== 'media' && (
                           <button
@@ -2426,7 +2556,7 @@ export function Studio() {
                 <div className="flex flex-col gap-4">
                   <div className="sticky top-0 bg-neutral-900/95 py-2 z-10 border-b border-white/10 flex justify-between items-center">
                     <span className="text-xs font-bold text-primary uppercase tracking-wider">
-                      🎵 Song & Sermon Backgrounds
+                      Local Backgrounds · Assign by display
                     </span>
                   </div>
 
@@ -2444,19 +2574,7 @@ export function Studio() {
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      {[...customMediaBgs.filter((a) => a.type === 'video'), ...MEDIA_BACKGROUNDS.filter((a) => a.type === 'video')].map((asset) => (
-                        <div
-                          key={asset.id}
-                          className={`p-1.5 rounded-lg border cursor-pointer flex flex-col gap-1 transition-all ${mediaBackground === asset.url ? 'border-primary bg-primary/10 shadow-[0_0_10px_rgba(0,242,254,0.25)]' : 'border-white/10 hover:border-white/20'
-                            }`}
-                          onClick={() => chooseMediaBackground(asset)}
-                        >
-                          <div className="aspect-video rounded bg-black overflow-hidden relative">
-                            <video src={asset.url} className="w-full h-full object-cover" autoPlay loop muted />
-                          </div>
-                          <span className="text-[10px] font-bold truncate text-slate-200">{asset.title}</span>
-                        </div>
-                      ))}
+                      {availableBackgrounds.filter((asset) => asset.type === 'video').map(renderBackgroundCard)}
                     </div>
                   </div>
 
@@ -2474,19 +2592,7 @@ export function Studio() {
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      {[...customMediaBgs.filter((a) => a.type === 'image'), ...MEDIA_BACKGROUNDS.filter((a) => a.type === 'image')].map((asset) => (
-                        <div
-                          key={asset.id}
-                          className={`p-1.5 rounded-lg border cursor-pointer flex flex-col gap-1 transition-all ${mediaBackground === asset.url ? 'border-primary bg-primary/10 shadow-[0_0_10px_rgba(0,242,254,0.25)]' : 'border-white/10 hover:border-white/20'
-                            }`}
-                          onClick={() => chooseMediaBackground(asset)}
-                        >
-                          <div className="aspect-video rounded bg-black overflow-hidden relative">
-                            <img src={asset.url} alt="" className="w-full h-full object-cover" />
-                          </div>
-                          <span className="text-[10px] font-bold truncate text-slate-200">{asset.title}</span>
-                        </div>
-                      ))}
+                      {availableBackgrounds.filter((asset) => asset.type === 'image').map(renderBackgroundCard)}
                     </div>
                   </div>
                 </div>
@@ -2512,10 +2618,9 @@ export function Studio() {
                     ...items.filter((ex) => ex.title !== item.title || ex.kind !== item.kind),
                     item,
                   ]);
-                  loadSong(item);
                   setBuilderOpen(false);
                   setSavedState('saved');
-                  setNotice(`${item.kind === 'sermon' ? 'Sermon' : 'Song'} saved to local device`);
+                  setNotice(`${item.kind === 'sermon' ? 'Sermon' : 'Song'} saved to local device. The current display was left unchanged.`);
                 })
                 .catch(() => setSavedState('error'));
             }}
