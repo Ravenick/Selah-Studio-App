@@ -10,8 +10,28 @@ import { FormattedText } from './formatted-text';
 import { PRESENTATION_COLORS, type PresentationFont } from '@/lib/scripture-appearance';
 import type { TextFormat } from '@/lib/presentation';
 
-const defaultHeaderStyle: HeaderStyle = { weight: '700', size: 100, color: '#ffffff', font: 'font-montserrat' };
+const defaultHeaderStyle: HeaderStyle = { weight: '700', size: 100, color: '#ffffff', font: 'font-montserrat', showMarker: true };
 const defaultSongBackground = '/backgrounds/motion/Blue Particles.mp4';
+
+function rebaseFormatsAfterEdit(formats: TextFormat[], previousText: string, nextText: string): TextFormat[] {
+  let prefix = 0;
+  while (prefix < previousText.length && prefix < nextText.length && previousText[prefix] === nextText[prefix]) prefix++;
+  let suffix = 0;
+  while (suffix < previousText.length - prefix && suffix < nextText.length - prefix
+    && previousText[previousText.length - 1 - suffix] === nextText[nextText.length - 1 - suffix]) suffix++;
+  const oldChangedEnd = previousText.length - suffix;
+  const newChangedEnd = nextText.length - suffix;
+  const delta = newChangedEnd - oldChangedEnd;
+
+  return formats.flatMap((format) => {
+    if (format.end <= prefix) return [format];
+    if (format.start >= oldChangedEnd) return [{ ...format, start: format.start + delta, end: format.end + delta }];
+    if (format.start < prefix && format.end > oldChangedEnd) return [{ ...format, end: format.end + delta }];
+    if (format.start < prefix) return [{ ...format, end: prefix }];
+    if (format.end > oldChangedEnd) return [{ ...format, start: newChangedEnd, end: format.end + delta }];
+    return [];
+  }).filter((format) => format.start >= 0 && format.start < format.end && format.start < nextText.length);
+}
 
 export function SongBuilder({ onClose, onApply, onSave, mode = 'song', initialSong }: { mode?: 'song' | 'sermon'; initialSong?: Song | undefined; onClose: () => void; onApply: (song: Song) => void; onSave: (song: Song) => void }) {
   const sermon = mode === 'sermon';
@@ -22,6 +42,7 @@ export function SongBuilder({ onClose, onApply, onSave, mode = 'song', initialSo
   const [sections, setSections] = useState<SongSection[]>(initialSong?.sections ?? parseSections(initialSong?.sermonText ?? initialSong?.lyrics.join('\n\n') ?? ''));
   const [draggingSection, setDraggingSection] = useState<number | null>(null);
   const [headerStyle, setHeaderStyle] = useState<HeaderStyle>(initialSong?.headerStyle ?? defaultHeaderStyle);
+  const [textSelection, setTextSelection] = useState<{ start: number; end: number } | null>(null);
   const baseline = useRef({
     title: initialSong?.title ?? '',
     lyrics: initialSong?.sermonText ?? initialSong?.lyrics.join('\n\n') ?? '',
@@ -40,14 +61,19 @@ export function SongBuilder({ onClose, onApply, onSave, mode = 'song', initialSo
     || JSON.stringify(headerStyle) !== baseline.current.headerStyle;
   const headings = sectionHeadings(sections);
   const current = sections[active];
-  const activeTextFormat = current?.formats?.reduce<Partial<TextFormat>>((style, format) => ({ ...style, ...format }), {}) ?? {};
+  const textRange = textSelection && textSelection.end > textSelection.start
+    ? textSelection
+    : { start: 0, end: current?.text.length ?? 0 };
+  const activeTextFormat = current?.formats
+    ?.filter((format) => format.start <= textRange.start && format.end >= textRange.end)
+    .reduce<Partial<TextFormat>>((style, format) => ({ ...style, ...format }), {}) ?? {};
   function applyTextStyle(style: Partial<TextFormat>) {
     if (!current?.text.length) return;
-    const nextStyle = { ...activeTextFormat, ...style };
-    delete nextStyle.start;
-    delete nextStyle.end;
+    const range = textSelection && textSelection.end > textSelection.start
+      ? textSelection
+      : { start: 0, end: current.text.length };
     setSections((items) => items.map((item, index) => index === active
-      ? { ...item, formats: [{ start: 0, end: item.text.length, ...nextStyle }] }
+      ? { ...item, formats: [...(item.formats ?? []), { ...range, ...style }] }
       : item));
     setApplied(false);
   }
@@ -63,6 +89,7 @@ export function SongBuilder({ onClose, onApply, onSave, mode = 'song', initialSo
     setSections(next);
     setLyrics(next.map(item => item.text).join('\n\n'));
     setActive(to);
+    setTextSelection(null);
     setApplied(false);
   }
   function close() { if (dirty) setConfirm(true); else onClose(); }
@@ -89,7 +116,7 @@ export function SongBuilder({ onClose, onApply, onSave, mode = 'song', initialSo
           <label>TEXT FONT<select aria-label="Song or sermon text font" value={(activeTextFormat.font as PresentationFont | undefined) ?? 'font-montserrat'} onChange={(event) => applyTextStyle({ font: event.target.value })}><option value="font-montserrat">Montserrat</option><option value="font-bebas-neue">Bebas Neue</option><option value="font-dm">DM Sans</option><option value="font-georgia">Georgia</option><option value="font-mono">Monospace</option></select></label>
           <label>TEXT SIZE <span>{activeTextFormat.size ?? 100}%</span><input aria-label="Song or sermon text size" type="range" min="75" max="160" step="5" value={activeTextFormat.size ?? 100} onChange={(event) => applyTextStyle({ size: Number(event.target.value) })}/></label>
         </div>
-        <div className="builder-ribbon-palette" role="group" aria-label="Song or sermon text color palette">{PRESENTATION_COLORS.map((color) => <button key={color} type="button" className={(activeTextFormat.color ?? '#ffffff').toLowerCase() === color ? 'selected' : ''} style={{ backgroundColor: color }} aria-label={`Text color ${color}`} aria-pressed={(activeTextFormat.color ?? '#ffffff').toLowerCase() === color} title={color} onClick={() => applyTextStyle({ color })}/>)}</div>
+        <div className="builder-ribbon-palette" role="group" aria-label="Song or sermon text color palette">{PRESENTATION_COLORS.map((color) => <button key={color} type="button" className={(activeTextFormat.color ?? '#ffffff').toLowerCase() === color ? 'selected' : ''} style={{ backgroundColor: color, filter: `drop-shadow(0 0 3px ${color}66)` }} aria-label={`Text color ${color}`} aria-pressed={(activeTextFormat.color ?? '#ffffff').toLowerCase() === color} title={color} onClick={() => applyTextStyle({ color })}/>)}</div>
         <span className="builder-ribbon-caption">TEXT APPEARANCE</span>
       </section>
       {!sermon && <section className="builder-ribbon-group">
@@ -98,18 +125,23 @@ export function SongBuilder({ onClose, onApply, onSave, mode = 'song', initialSo
           <label>MARKER SIZE <span>{headerStyle.size}%</span><input aria-label="Verse marker size" type="range" min="75" max="150" value={headerStyle.size} onChange={(event) => applyHeaderStyle({ size: Number(event.target.value) })}/></label>
           <label>WEIGHT<select aria-label="Verse marker weight" value={headerStyle.weight} onChange={(event) => applyHeaderStyle({ weight: event.target.value as HeaderStyle['weight'] })}><option value="400">Regular</option><option value="500">Medium</option><option value="600">Semibold</option><option value="700">Bold</option></select></label>
         </div>
-        <div className="builder-ribbon-palette" role="group" aria-label="Verse marker color palette">{PRESENTATION_COLORS.map((color) => <button key={color} type="button" className={headerStyle.color.toLowerCase() === color ? 'selected' : ''} style={{ backgroundColor: color }} aria-label={`Verse marker color ${color}`} aria-pressed={headerStyle.color.toLowerCase() === color} title={color} onClick={() => applyHeaderStyle({ color })}/>)}</div>
+        <div className="builder-ribbon-palette" role="group" aria-label="Verse marker color palette">{PRESENTATION_COLORS.map((color) => <button key={color} type="button" className={headerStyle.color.toLowerCase() === color ? 'selected' : ''} style={{ backgroundColor: color, filter: `drop-shadow(0 0 3px ${color}66)` }} aria-label={`Verse marker color ${color}`} aria-pressed={headerStyle.color.toLowerCase() === color} title={color} onClick={() => applyHeaderStyle({ color })}/>)}</div>
+        <label className="builder-marker-toggle"><Switch aria-label="Show automatic verse and chorus markers" checked={headerStyle.showMarker !== false} onCheckedChange={(checked) => applyHeaderStyle({ showMarker: checked })}/><span>Show automatic verse / chorus marker</span></label>
         <span className="builder-ribbon-caption">AUTOMATIC VERSE MARKER</span>
       </section>}
     </div>
     <div className="builder-body">
-      <div className="builder-compose"><label className="builder-label" htmlFor="new-song-title">{sermon ? 'SERMON TITLE' : 'SONG TITLE'}</label><input ref={titleInput} id="new-song-title" className={titleNeedsAttention ? 'builder-title-missing' : ''} placeholder={sermon ? 'Untitled sermon' : 'Untitled worship song'} value={title} onChange={event => { setTitle(event.target.value); setTitleNeedsAttention(false); setError(''); setApplied(false); }}/>
-        <label className="builder-label" htmlFor="new-song-lyrics">{sermon ? 'SERMON TEXT' : 'LYRICS'} <span>{sections.length} sections</span></label><textarea id="new-song-lyrics" placeholder={'Paste your lyrics…\n\nA blank line between each verse.'} value={lyrics} onChange={event => { const value = event.target.value; const next = parseSections(value, sections); setLyrics(value); setSections(next); setActive(index => Math.min(index, Math.max(0, next.length - 1))); setApplied(false); }}/>
-        <div id="song-section-panel" role="tabpanel" aria-labelledby={`song-section-${active}`} className={`builder-slide-preview style-preview-screen ${current?.chorus ? 'is-chorus' : ''}`}><video src={background} muted autoPlay loop playsInline/><div>{!sermon && <strong style={{ color: headerStyle.color, fontFamily: headerStyle.font === 'font-bebas-neue' ? 'Bebas Neue, sans-serif' : headerStyle.font === 'font-montserrat' ? 'Montserrat, sans-serif' : headerStyle.font === 'font-mono' ? 'ui-monospace, monospace' : headerStyle.font === 'font-georgia' ? 'Georgia, serif' : 'inherit', fontSize: `${Math.max(10, 15 * headerStyle.size / 100)}px`, fontWeight: Number(headerStyle.weight) }}>{headings[active]}</strong>}<p><FormattedText text={current?.text ?? ''} formats={current?.formats}/></p></div></div>
+      <div className="builder-compose-fields">
+        <label className="builder-label" htmlFor="new-song-title">{sermon ? 'SERMON TITLE' : 'SONG TITLE'}</label><input ref={titleInput} id="new-song-title" className={titleNeedsAttention ? 'builder-title-missing' : ''} placeholder={sermon ? 'Untitled sermon' : 'Untitled worship song'} value={title} onChange={event => { setTitle(event.target.value); setTitleNeedsAttention(false); setError(''); setApplied(false); }}/>
+        <label className="builder-label" htmlFor="new-song-lyrics">{sermon ? 'SERMON TEXT' : 'LYRICS'} <span>{sections.length} sections</span></label><textarea id="new-song-lyrics" placeholder={'Paste your lyrics…\n\nA blank line between each verse.'} value={lyrics} onChange={event => { const value = event.target.value; const next = parseSections(value, sections); setLyrics(value); setSections(next); setActive(index => Math.min(index, Math.max(0, next.length - 1))); setTextSelection(null); setApplied(false); }}/>
+      </div>
+      <div className="builder-preview-pane">
+        <div className="builder-label">STYLE PREVIEW <span>{headings[active] ?? (sermon ? 'Sermon slide' : 'Verse')}</span></div>
+        <div id="song-section-panel" role="tabpanel" aria-labelledby={`song-section-${active}`} className={`builder-slide-preview style-preview-screen ${current?.chorus ? 'is-chorus' : ''}`}><video src={background} muted autoPlay loop playsInline/><div>{!sermon && headerStyle.showMarker !== false && <strong style={{ color: headerStyle.color, fontFamily: headerStyle.font === 'font-bebas-neue' ? 'Bebas Neue, sans-serif' : headerStyle.font === 'font-montserrat' ? 'Montserrat, sans-serif' : headerStyle.font === 'font-mono' ? 'ui-monospace, monospace' : headerStyle.font === 'font-georgia' ? 'Georgia, serif' : 'inherit', fontSize: `${Math.max(10, 15 * headerStyle.size / 100)}px`, fontWeight: Number(headerStyle.weight) }}>{headings[active]}</strong>}<p style={{ fontSize: `${Math.max(8, Math.min(19, 19 * Math.sqrt(350 / Math.max(350, current?.text.length ?? 0))))}px` }}><FormattedText text={current?.text ?? ''} formats={current?.formats}/></p></div></div>
       </div>
       <div className="builder-arrange"><div className="builder-label">{sermon ? 'SERMON SLIDES' : 'SONG ARRANGEMENT'} <span>{sermon ? `${sections.length} slides` : `${sections.filter(section => !section.chorus).length} verses · ${sections.filter(section => section.chorus).length} choruses`}</span></div>
-        {sections.length ? <><div className="verse-tabs" role="tablist" aria-label="Song sections">{sections.map((section, index) => <div key={index} draggable onDragStart={() => setDraggingSection(index)} onDragOver={event => event.preventDefault()} onDrop={() => { if (draggingSection !== null) moveSection(draggingSection, index); setDraggingSection(null); }} onDragEnd={() => setDraggingSection(null)} className={`builder-section ${active === index ? 'selected' : ''} ${section.chorus ? 'is-chorus' : ''} ${draggingSection === index ? 'is-dragging' : ''}`}><Button variant="ghost" role="tab" aria-selected={active === index} aria-controls="song-section-panel" id={`song-section-${index}`} className="builder-section-tab" onClick={() => setActive(index)}>{!sermon && <span>{headings[index]}</span>}<small>{section.text.split('\n')[0]}</small></Button>{!sermon && <label className="chorus-toggle"><span>Designate as Chorus</span><Switch aria-label={`Designate section ${index + 1} as Chorus`} checked={section.chorus} onCheckedChange={checked => { setSections(items => items.map((item, i) => i === index ? { ...item, chorus: checked } : item)); setApplied(false); }}/></label>}</div>)}</div>
-        <SelectionEditor key={active} text={current?.text ?? ''} formats={current?.formats ?? []} defaultFont="font-montserrat" showTabs={false} onChange={text => {const next = sections.map((item,i) => i === active ? {...item,text,formats:(item.formats ?? []).map(format => ({...format,end:text.length}))} : item);setSections(next);setLyrics(next.map(item => item.text).join('\n\n'));setApplied(false);}} onFormat={format => {setSections(items => items.map((item,i) => i === active ? {...item,formats:[...(item.formats ?? []),format]} : item));setApplied(false);}}/>
+        {sections.length ? <><div className="verse-tabs" role="tablist" aria-label="Song sections">{sections.map((section, index) => <div key={index} draggable onDragStart={() => setDraggingSection(index)} onDragOver={event => event.preventDefault()} onDrop={() => { if (draggingSection !== null) moveSection(draggingSection, index); setDraggingSection(null); }} onDragEnd={() => setDraggingSection(null)} className={`builder-section ${active === index ? 'selected' : ''} ${section.chorus ? 'is-chorus' : ''} ${draggingSection === index ? 'is-dragging' : ''}`}><Button variant="ghost" role="tab" aria-selected={active === index} aria-controls="song-section-panel" id={`song-section-${index}`} className="builder-section-tab" onClick={() => { setActive(index); setTextSelection(null); }}>{!sermon && <span>{headings[index]}</span>}<small>{section.text.split('\n')[0]}</small></Button>{!sermon && <label className="chorus-toggle"><span>Designate as Chorus</span><Switch aria-label={`Designate section ${index + 1} as Chorus`} checked={section.chorus} onCheckedChange={checked => { setSections(items => items.map((item, i) => i === index ? { ...item, chorus: checked } : item)); setApplied(false); }}/></label>}</div>)}</div>
+        <SelectionEditor key={active} text={current?.text ?? ''} formats={current?.formats ?? []} defaultFont="font-montserrat" showTabs={false} onSelectionChange={setTextSelection} onChange={text => {const previousText = current?.text ?? ''; const next = sections.map((item,i) => i === active ? {...item,text,formats:rebaseFormatsAfterEdit(item.formats ?? [], previousText, text)} : item);setSections(next);setLyrics(next.map(item => item.text).join('\n\n'));setTextSelection(null);setApplied(false);}} onFormat={format => {setSections(items => items.map((item,i) => i === active ? {...item,formats:[...(item.formats ?? []),format]} : item));setApplied(false);}}/>
 </> : <div className="builder-empty"><Music2 size={32}/><span>Your next song starts here.</span></div>}
       </div>
     </div>

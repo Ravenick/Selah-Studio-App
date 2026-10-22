@@ -682,7 +682,7 @@ kbd {
   height: 64px;
   border: 1px solid transparent;
   padding: 10px;
-  width: 100%;
+  width: 90%;
   gap: 10px;
 }
 
@@ -5993,6 +5993,282 @@ h1 {
 .app-header,
 .builder-fixed-stylebar {
   background-image: linear-gradient(110deg, color-mix(in oklab, var(--primary) 3%, transparent), transparent 52%);
+}
+
+/* Clear hit targets for the library and workspace controls. */
+.library-tabs { gap: 5px; padding: 7px 10px; }
+.library-tabs button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  margin: 0;
+  padding: 8px 5px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+.library-tabs button:hover { transform: translateY(-1px); border-color: color-mix(in oklab, var(--primary) 22%, var(--border)); }
+.library-tabs .active { border-color: color-mix(in oklab, var(--primary) 24%, var(--border)); border-radius: 9px; }
+.library-tabs .active:after { inset: auto 22% -1px; width: auto; border-radius: 999px; box-shadow: 0 0 10px color-mix(in oklab, var(--primary) 48%, transparent); }
+.workspace-tabs { align-items: center; gap: 8px; }
+.workspace-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+.workspace-tabs button:hover { border-color: color-mix(in oklab, var(--primary) 25%, var(--border)); }
+.workspace-tabs .active { border-color: color-mix(in oklab, var(--primary) 22%, var(--border)); background: color-mix(in oklab, var(--primary) 9%, var(--surface)); }
+.workspace-tabs .active:after { display: none; }
+.header-actions { gap: 9px; }
+.header-actions > button { flex: 0 0 auto; }
+.header-actions > button[aria-label="Workspace Settings"] { margin-right: 3px; }
+.header-actions > button:last-child {
+  width: auto !important;
+  min-width: 92px;
+  height: 29px;
+  margin-left: 2px !important;
+  padding-inline: 12px;
+  gap: 7px;
+  border-radius: 9px;
+}
+.header-actions > button:focus-visible,
+.library-tabs button:focus-visible,
+.workspace-tabs button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* The swatches have a quiet halo at rest, with a stronger halo on hover and selection. */
+.scripture-color-grid button,
+.builder-ribbon-palette button {
+  box-shadow: 0 0 5px color-mix(in oklab, var(--primary) 28%, transparent);
+}
+.scripture-color-grid button:hover,
+.builder-ribbon-palette button:hover {
+  box-shadow: 0 0 9px color-mix(in oklab, var(--primary) 52%, transparent);
+}
+
+/* Keep the live action visibly filled in every accent theme. */
+.monitor-card .take-live-btn {
+  background: var(--primary) !important;
+  color: var(--primary-foreground, #07110f) !important;
+  border-color: color-mix(in oklab, var(--primary) 72%, white) !important;
+  box-shadow: 0 0 13px color-mix(in oklab, var(--primary) 28%, transparent);
+}
+.monitor-card .take-live-btn:hover {
+  background: color-mix(in oklab, var(--primary) 84%, white) !important;
+  color: #07110f !important;
+  box-shadow: 0 0 18px color-mix(in oklab, var(--primary) 40%, transparent);
+}
+
+/* Three-pane song/sermon workshop: compose, arrange, and see the slide together. */
+.song-builder {
+  width: min(1480px, calc(100vw - 32px));
+  max-width: 1480px;
+  height: min(920px, calc(100dvh - 32px));
+  max-height: calc(100dvh - 32px);
+}
+.song-builder .builder-heading { flex: 0 0 auto; padding: 16px 24px 13px; }
+.song-builder .builder-heading h2 { font-size: 20px; }
+.song-builder .builder-eyebrow { margin-bottom: 4px; }
+.song-builder .builder-fixed-stylebar { flex: 0 0 auto; }
+.song-builder .builder-body {
+  flex: 1 1 auto;
+  grid-template-columns: minmax(230px, .82fr) minmax(300px, 1.08fr) minmax(300px, 1fr);
+  overflow: hidden;
+}
+.song-builder .builder-compose-fields,
+.song-builder .builder-arrange,
+.song-builder .builder-preview-pane {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px;
+}
+.song-builder .builder-compose-fields { grid-column: 1; grid-row: 1; border-right: 1px solid var(--border); }
+.song-builder .builder-arrange { grid-column: 2; grid-row: 1; border-right: 1px solid var(--border); }
+.song-builder .builder-preview-pane { grid-column: 3; grid-row: 1; display: flex; flex-direction: column; gap: 10px; }
+.song-builder .builder-compose-fields > input { margin-bottom: 17px; }
+.song-builder .builder-compose-fields > textarea { height: clamp(170px, 31vh, 340px); min-height: 150px; margin-bottom: 0; }
+.song-builder .builder-preview-pane .builder-slide-preview { width: 100%; min-height: 0; aspect-ratio: 16 / 9; }
+.song-builder .builder-preview-pane .builder-slide-preview > div { padding: clamp(10px, 2vw, 22px); }
+.song-builder .builder-preview-pane .builder-slide-preview p { font-size: clamp(12px, 1.1vw, 18px); }
+.song-builder .builder-footer { flex: 0 0 auto; padding: 12px 20px; }
+
+@media (max-width: 1040px) {
+  .song-builder .builder-body { grid-template-columns: minmax(0, .82fr) minmax(0, 1.08fr) minmax(0, 1fr); }
+}
+
+.desktop-window-warning { display: none; }
+.song-builder {
+  height: min(980px, calc(100dvh - 24px));
+  max-height: calc(100dvh - 24px);
+  width: min(1600px, calc(100vw - 24px));
+  max-width: 1600px;
+}
+.song-builder .builder-body {
+  grid-template-columns: minmax(0, .82fr) minmax(0, 1.08fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+.song-builder .builder-compose-fields { display: flex !important; flex-direction: column; grid-area: 1 / 1 / 2 / 2 !important; align-self: stretch; justify-self: stretch; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: auto; padding: 14px; border-right: 1px solid var(--border); }
+.song-builder .builder-arrange,
+.song-builder .builder-preview-pane { padding: 14px; }
+.song-builder .builder-arrange { display: flex; flex-direction: column; grid-area: 1 / 2 / 2 / 3 !important; }
+.song-builder .builder-arrange > .builder-label { flex: 0 0 auto; }
+.song-builder .builder-arrange .verse-tabs {
+  flex: 0 1 34%;
+  max-height: 34%;
+  min-height: 92px;
+  margin-bottom: 10px;
+}
+.song-builder .builder-arrange .selection-editor-v2 {
+  flex: 1 1 0;
+  min-height: 140px;
+  margin-bottom: 0;
+}
+.song-builder .builder-arrange .editor-textarea-main { flex: 1 1 auto; min-height: 0; resize: none; }
+.song-builder .builder-preview-pane { grid-area: 1 / 3 / 2 / 4 !important; overflow: hidden; }
+.song-builder .builder-preview-pane .builder-slide-preview {
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 250px;
+  max-height: 100%;
+  aspect-ratio: 4 / 3;
+}
+.song-builder .builder-slide-preview > div {
+  max-height: none;
+  overflow: visible;
+  padding: clamp(10px, 1.5vw, 22px);
+}
+.song-builder .builder-slide-preview p { overflow-wrap: anywhere; }
+.builder-marker-toggle { display: flex; align-items: center; gap: 8px; margin-top: 9px; color: var(--foreground); font-size: 10px; font-weight: 600; }
+.builder-marker-toggle > span { color: var(--muted-foreground); }
+
+/* Restore the compose inputs after splitting the builder into independent panes. */
+.song-builder .builder-compose-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+.song-builder .builder-compose-fields > input,
+.song-builder .builder-compose-fields > textarea {
+  display: block !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 11px 13px !important;
+  border: 1px solid color-mix(in oklab, var(--primary) 42%, var(--border)) !important;
+  border-radius: 10px !important;
+  background: color-mix(in oklab, var(--surface) 90%, var(--canvas)) !important;
+  color: var(--foreground) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .05) !important;
+  font: inherit;
+  font-size: 12px;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+.song-builder .builder-compose-fields > input {
+  flex: 0 0 auto;
+  min-height: 43px;
+  margin: 0 0 17px;
+}
+.song-builder .builder-compose-fields > textarea {
+  flex: 1 1 auto;
+  min-height: 220px;
+  height: auto;
+  margin: 0;
+  line-height: 1.65;
+  resize: vertical;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.song-builder .builder-compose-fields > input:hover,
+.song-builder .builder-compose-fields > textarea:hover {
+  border-color: color-mix(in oklab, var(--primary) 70%, var(--border)) !important;
+}
+.song-builder .builder-compose-fields > input:focus,
+.song-builder .builder-compose-fields > textarea:focus {
+  outline: none !important;
+  border-color: var(--primary) !important;
+  background: color-mix(in oklab, var(--primary) 7%, var(--surface)) !important;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 24%, transparent), inset 0 1px 0 rgb(255 255 255 / .04) !important;
+}
+.song-builder .builder-compose-fields > input::placeholder,
+.song-builder .builder-compose-fields > textarea::placeholder { color: color-mix(in oklab, var(--muted-foreground) 78%, transparent); }
+
+/* Make translation choices respond clearly to pointer and keyboard focus. */
+.bible-version-button {
+  cursor: pointer;
+  transform: translateY(0);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, var(--primary) 12%, transparent), 0 0 0 transparent;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+.bible-version-button:hover,
+.bible-version-button:focus {
+  transform: translateY(-1px) !important;
+  color: var(--primary-foreground) !important;
+  border-color: color-mix(in oklab, var(--primary) 80%, white) !important;
+  background: var(--primary) !important;
+  box-shadow: 0 5px 17px color-mix(in oklab, var(--primary) 30%, transparent), inset 0 1px 0 rgb(255 255 255 / .12) !important;
+}
+.bible-version-button:focus { outline: none; }
+.bible-version-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px color-mix(in oklab, var(--primary) 14%, transparent);
+}
+
+/* DialogContent's Tailwind defaults cap every dialog at max-w-lg and add grid/padding.
+   This builder owns a three-pane desktop layout, so explicitly clear those defaults. */
+.song-builder {
+  display: flex !important;
+  width: min(1600px, calc(100vw - 24px)) !important;
+  max-width: 1600px !important;
+  height: min(980px, calc(100dvh - 24px)) !important;
+  max-height: calc(100dvh - 24px) !important;
+  gap: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+@media (max-width: 767px) {
+  .desktop-window-warning {
+    position: fixed;
+    z-index: 100000;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: radial-gradient(ellipse at 50% 15%, color-mix(in oklab, var(--primary) 13%, #080b10), #080b10 70%);
+    color: var(--foreground);
+  }
+  .desktop-window-warning-card {
+    width: min(100%, 440px);
+    padding: 34px;
+    border: 1px solid color-mix(in oklab, var(--primary) 26%, var(--border));
+    border-radius: 22px;
+    background: color-mix(in oklab, var(--surface) 92%, #080b10);
+    box-shadow: 0 26px 90px rgb(0 0 0 / .45), 0 0 38px color-mix(in oklab, var(--primary) 9%, transparent);
+    text-align: center;
+  }
+  .desktop-window-warning-card img { width: 54px; height: 54px; margin: 0 auto 20px; border-radius: 16px; object-fit: cover; }
+  .desktop-window-warning-card .eyebrow { color: var(--primary); font-size: 9px; font-weight: 800; letter-spacing: .16em; }
+  .desktop-window-warning-card h1 { margin: 10px 0 12px; font-size: clamp(24px, 7vw, 32px); line-height: 1.1; letter-spacing: -.04em; }
+  .desktop-window-warning-card p:last-child { margin: 0; color: var(--muted-foreground); font-size: 14px; line-height: 1.6; }
+}
+
+/* Keep the marker close to the lyric block so both feel like one centered slide. */
+.song-screen .song-slide-heading {
+  position: relative;
+  inset: auto;
+  margin: 0 0 .32em;
+  line-height: 1.05;
 }
 
 /* Web-only home gateway; the Tauri root route continues to render Studio. */

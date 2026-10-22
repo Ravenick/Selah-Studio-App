@@ -1,6 +1,6 @@
 import { sectionHeadings } from './studio-workflows';
 import type { TextFormat } from './presentation';
-export type HeaderStyle = { weight: '400' | '500' | '600' | '700'; size: number; color: string; font: string };
+export type HeaderStyle = { weight: '400' | '500' | '600' | '700'; size: number; color: string; font: string; showMarker?: boolean };
 export type Slide = { id: string; text: string; label: string; kind: 'song' | 'scripture' | 'media' | 'sermon'; title: string; background?: string; backgroundType?: 'image' | 'video'; heading?: string; headingStyle?: HeaderStyle; chorus?: boolean; verses?: { number: number; text: string }[]; formats?: TextFormat[]; mediaUrl?: string; mediaType?: 'image' | 'video' | 'youtube'; audioMuted?: boolean; youtubeUrl?: string };
 export type Song = { title: string; author: string; tag: string; lyrics: string[]; kind?: 'song' | 'sermon'; sections?: { text: string; chorus: boolean; formats?: TextFormat[] | undefined }[]; background?: string | undefined; backgroundType?: 'image' | 'video' | undefined; headerStyle?: HeaderStyle | undefined; sermonText?: string | undefined; slideBreaks?: number[] | undefined };
 export const songs: Song[] = [];
@@ -10,7 +10,7 @@ export const chapters: Record<string, { chapter: number; verses: string[] }> = {
   Romans: { chapter: 8, verses: ['There is therefore now no condemnation to them which are in Christ Jesus, who walk not after the flesh, but after the Spirit.', 'For the law of the Spirit of life in Christ Jesus hath made me free from the law of sin and death.'] },
 };
 export const romans28 = 'And we know that all things work together for good to them that love God, to them who are the called according to his purpose.';
-export function songSlides(song: Song): Slide[] { const headings = song.sections ? sectionHeadings(song.sections) : []; return song.lyrics.map((text, i) => ({ id: `${song.title}-${i}`, text, label: song.kind === 'sermon' ? `Slide ${i + 1}` : song.sections?.[i]?.chorus ? 'Chorus' : `Verse ${i + 1}`, title: song.title, kind: song.kind ?? 'song', background: song.background, backgroundType: song.backgroundType, heading: song.kind === 'sermon' ? undefined : headings[i], headingStyle: song.kind === 'sermon' ? undefined : song.headerStyle, chorus: song.kind === 'sermon' ? false : song.sections?.[i]?.chorus, formats: song.sections?.[i]?.formats })); }
+export function songSlides(song: Song): Slide[] { const headings = song.sections ? sectionHeadings(song.sections) : []; return song.lyrics.map((text, i) => ({ id: `${song.title}-${i}`, text, label: song.kind === 'sermon' ? `Slide ${i + 1}` : song.sections?.[i]?.chorus ? 'Chorus' : `Verse ${i + 1}`, title: song.title, kind: song.kind ?? 'song', background: song.background, backgroundType: song.backgroundType, heading: song.kind === 'sermon' || song.headerStyle?.showMarker === false ? undefined : headings[i], headingStyle: song.kind === 'sermon' ? undefined : song.headerStyle, chorus: song.kind === 'sermon' ? false : song.sections?.[i]?.chorus, formats: song.sections?.[i]?.formats })); }
 export const initialTimeline = [
   { id: 'welcome', title: 'Welcome Walk', subtitle: '5 min', kind: 'media' },
   { id: 'reading', title: 'Sermon Reading', subtitle: 'Psalm 23', kind: 'scripture' },

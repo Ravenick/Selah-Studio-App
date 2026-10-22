@@ -94,6 +94,15 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 const logo = { url: '/selah-logo.png' };
 const DEFAULT_BIBLE_ID = import.meta.env.VITE_SCRIPTURE_BIBLE_ID || 'de4e12af7f28f599-01';
 
+function postChannelMessage(channel: BroadcastChannel | null, message: unknown) {
+  if (!channel) return;
+  try {
+    channel.postMessage(message);
+  } catch {
+    // A projector webview can close between an event and its cleanup callback.
+  }
+}
+
 const BIBLE_TRANSLATIONS: Record<string, { label: string; id: string; isOffline?: boolean }> = {
   KJV: {
     label: 'KJV (Offline)',
@@ -692,7 +701,7 @@ export function Studio() {
   useEffect(() => {
     outputRef.current = output;
     setStoreLive(output.slide);
-    channel.current?.postMessage({ type: 'output', output });
+    postChannelMessage(channel.current, { type: 'output', output });
     try {
       localStorage.setItem('selah-projector-latest', JSON.stringify(output));
     } catch {
@@ -710,11 +719,12 @@ export function Studio() {
     channel.current = bc;
     bc.onmessage = (event) => {
       if (event.data?.type === 'request') {
-        bc.postMessage({ type: 'output', output: outputRef.current });
+        postChannelMessage(bc, { type: 'output', output: outputRef.current });
       }
     };
     return () => {
-      bc?.close();
+      if (channel.current === bc) channel.current = null;
+      bc.close();
     };
   }, []);
 
@@ -1571,6 +1581,14 @@ export function Studio() {
   return (
     <TooltipProvider delayDuration={200}>
       <div className={`studio theme-${theme}`}>
+        <div className="desktop-window-warning" role="status">
+          <div className="desktop-window-warning-card">
+            <img src={logo.url} alt="" />
+          <p className="eyebrow">SELAH STUDIO · DESKTOP WORKSPACE</p>
+            <h1>Give the studio a little more room.</h1>
+            <p>Selah Studio needs a window at least 768 pixels wide. Please maximize this window or open the app on a desktop display.</p>
+          </div>
+        </div>
         {/* Top Header Bar */}
         <header className="app-header">
           <div className="flex items-center gap-3">
@@ -1966,7 +1984,7 @@ export function Studio() {
                       <label>
                         Verse color
                         <div className="scripture-color-grid" role="group" aria-label="Scripture text color palette">
-                          {PRESENTATION_COLORS.map((color) => <button key={color} type="button" className={scriptureAppearance.textColor.toLowerCase() === color ? 'selected' : ''} style={{ backgroundColor: color }} aria-label={`Scripture text color ${color}`} aria-pressed={scriptureAppearance.textColor.toLowerCase() === color} title={color} onClick={() => saveScriptureAppearance({ ...scriptureAppearance, textColor: color })} />)}
+                          {PRESENTATION_COLORS.map((color) => <button key={color} type="button" className={scriptureAppearance.textColor.toLowerCase() === color ? 'selected' : ''} style={{ backgroundColor: color, filter: `drop-shadow(0 0 3px ${color}66)` }} aria-label={`Scripture text color ${color}`} aria-pressed={scriptureAppearance.textColor.toLowerCase() === color} title={color} onClick={() => saveScriptureAppearance({ ...scriptureAppearance, textColor: color })} />)}
                         </div>
                       </label>
                     </div>
@@ -2162,6 +2180,8 @@ export function Studio() {
                           } else if (slides[selected]) {
                             broadcast(slides[selected]!);
                           }
+                          setActiveFocus('preview');
+                          e.currentTarget.blur();
                           return;
                         }
                         else if (e.key === 'ArrowLeft' && e.currentTarget.selectionStart === 0) {
@@ -2202,7 +2222,7 @@ export function Studio() {
                           size="sm"
                           className="h-6 text-[10px] px-2.5 bg-primary text-black font-semibold"
                           disabled={!highlightedVerses.length}
-                          onClick={() => displayHighlightedVerses(autoPush)}
+                          onClick={() => { setActiveFocus('preview'); displayHighlightedVerses(autoPush); }}
                         >
                           Display [↵]
                         </Button>
@@ -2846,13 +2866,13 @@ export function Projector() {
 
   useEffect(() => {
     const bc = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('selah_projector_channel');
-    const requestCurrentOutput = () => bc?.postMessage({ type: 'request' });
+    const requestCurrentOutput = () => postChannelMessage(bc, { type: 'request' });
     if (bc) bc.onmessage = (event) => {
       if (event.data?.type === 'output' && event.data.output?.slide) setOutput(event.data.output);
       if (event.data?.type === 'request') {
         try {
           const cached = localStorage.getItem('selah-projector-latest');
-          if (cached) bc?.postMessage({ type: 'output', output: JSON.parse(cached) as OutputState });
+          if (cached) postChannelMessage(bc, { type: 'output', output: JSON.parse(cached) as OutputState });
         } catch {
           // fallback
         }

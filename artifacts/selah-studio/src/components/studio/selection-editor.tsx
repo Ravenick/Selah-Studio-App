@@ -17,6 +17,7 @@ export function SelectionEditor({
   formats = [],
   onChange,
   onFormat,
+  onSelectionChange,
   defaultFont = 'font-bebas-neue',
   activeTab: controlledTab,
   onActiveTabChange,
@@ -26,6 +27,7 @@ export function SelectionEditor({
   formats?: TextFormat[];
   onChange: (text: string) => void;
   onFormat: (format: TextFormat) => void;
+  onSelectionChange?: (selection: { start: number; end: number } | null) => void;
   defaultFont?: PresentationFont;
   activeTab?: 'text' | 'style';
   onActiveTabChange?: (tab: 'text' | 'style') => void;
@@ -73,10 +75,13 @@ export function SelectionEditor({
           onChange={(event) => {
             onChange(event.target.value);
             setSelection(null);
+            onSelectionChange?.(null);
           }}
           onSelect={(event) => {
             const { selectionStart: start, selectionEnd: end } = event.currentTarget;
-            setSelection(end > start ? { start, end } : null);
+            const next = end > start ? { start, end } : null;
+            setSelection(next);
+            onSelectionChange?.(next);
           }}
           placeholder="Type or edit slide text here..."
         />
