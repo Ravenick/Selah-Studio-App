@@ -5,12 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
-    "dev:tauri:web": "vite --config vite.config.ts --host 127.0.0.1 --port 1420",
-    "build": "pnpm run download:offline-speech && vite build --config vite.config.ts",
+    "dev:tauri": "pnpm run dev:tauri:web",
+    "dev:tauri:web": "vite --mode tauri --config vite.config.ts --host 127.0.0.1 --port 1420",
+    "build": "vite build --config vite.config.ts",
     "prebuild": "pnpm run tauri:icon",
-    "build:tauri:web": "pnpm run build",
+    "build:tauri:web": "pnpm run tauri:icon && vite build --mode tauri --config vite.config.ts",
     "build:desktop": "tauri build",
-    "download:offline-speech": "node ../../scripts/download-offline-speech.mjs",
     "tauri:icon": "tauri icon public/selah-logo.png --output src-tauri/icons",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit"
@@ -84,8 +84,5 @@
     "wouter": "^3.3.5",
     "zod": "catalog:",
     "zustand": "^5.0.15"
-  },
-  "dependencies": {
-    "@huggingface/transformers": "^4.3.1"
   }
 }

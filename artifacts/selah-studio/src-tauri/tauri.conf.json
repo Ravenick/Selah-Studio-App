@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "studio.selah.app",
   "build": {
-    "beforeDevCommand": "pnpm --dir ../.. run dev:all",
+    "beforeDevCommand": "pnpm --dir ../.. run dev:all:tauri",
     "devUrl": "http://localhost:1420/studio",
     "beforeBuildCommand": "pnpm run build:tauri:web",
     "frontendDist": "../dist/public"
@@ -24,7 +24,8 @@
     "security": {
       "csp": null,
       "capabilities": [
-        "default"
+        "default",
+        "projector"
       ]
     }
   },

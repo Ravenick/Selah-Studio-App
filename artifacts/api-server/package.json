@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm run build && pnpm run start",
+    "dev:tauri": "pnpm run dev",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"

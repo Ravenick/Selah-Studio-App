@@ -21,6 +21,7 @@ export type WorkspacePreferences = {
   scriptureBackgroundType: 'image' | 'video';
   mediaBackground: string;
   mediaBackgroundType: 'image' | 'video';
+  backgroundDim: number;
   outputName: string;
 };
 
@@ -101,6 +102,7 @@ export async function readWorkspacePreferences(): Promise<Partial<WorkspacePrefe
       ...(parsed.scriptureBackgroundType === 'image' || parsed.scriptureBackgroundType === 'video' ? { scriptureBackgroundType: parsed.scriptureBackgroundType } : {}),
       ...(typeof parsed.mediaBackground === 'string' ? { mediaBackground: parsed.mediaBackground } : {}),
       ...(parsed.mediaBackgroundType === 'image' || parsed.mediaBackgroundType === 'video' ? { mediaBackgroundType: parsed.mediaBackgroundType } : {}),
+      ...(typeof parsed.backgroundDim === 'number' && parsed.backgroundDim >= 0 && parsed.backgroundDim <= 100 ? { backgroundDim: parsed.backgroundDim } : {}),
       ...(typeof parsed.outputName === 'string' ? { outputName: parsed.outputName } : {}),
     };
   } catch {

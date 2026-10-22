@@ -18,8 +18,11 @@ if (Number.isNaN(port) || port <= 0) {
 
 const basePath = process.env.BASE_PATH ?? '/';
 
-export default defineConfig({
+export default defineConfig(async ({ mode }) => ({
   base: basePath,
+  define: {
+    __SELAH_TAURI_BUILD__: JSON.stringify(mode === 'tauri'),
+  },
   envDir: path.resolve(import.meta.dirname, '..', '..'),
   // Only expose client configuration. Never bundle provider credentials.
   envPrefix: ['VITE_API_BASE_URL', 'VITE_TAURI_API_BASE_URL', 'VITE_SCRIPTURE_BIBLE_ID', 'VITE_BIBLE_ID_'],
@@ -78,4 +81,4 @@ export default defineConfig({
     host: '0.0.0.0',
     allowedHosts: true,
   },
-});
+}));

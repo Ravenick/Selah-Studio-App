@@ -405,10 +405,6 @@ importers:
         version: 3.25.76
 
   artifacts/selah-studio:
-    dependencies:
-      '@huggingface/transformers':
-        specifier: ^4.3.1
-        version: 4.3.1(@types/node@25.9.6)
     devDependencies:
       '@hookform/resolvers':
         specifier: ^3.10.0

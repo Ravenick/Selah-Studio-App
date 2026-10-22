@@ -5,13 +5,20 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-available-monitors",
+    "core:window:allow-current-monitor",
     "fs:allow-read-file",
     "fs:allow-write-file",
+    "fs:allow-write-text-file",
     "fs:allow-mkdir",
     "fs:allow-exists",
     {
       "identifier": "fs:scope",
       "allow": [
+        {
+          "path": "$DOCUMENT/SelahStudio"
+        },
         {
           "path": "$DOCUMENT/SelahStudio/Assets"
         },
@@ -19,10 +26,10 @@
           "path": "$DOCUMENT/SelahStudio/Assets/**"
         },
         {
-          "path": "$DOCUMENT/SelahStudio/Schedules"
+          "path": "$DOCUMENT/SelahStudio/Schedule"
         },
         {
-          "path": "$DOCUMENT/SelahStudio/Schedules/**"
+          "path": "$DOCUMENT/SelahStudio/Schedule/**"
         }
       ]
     }

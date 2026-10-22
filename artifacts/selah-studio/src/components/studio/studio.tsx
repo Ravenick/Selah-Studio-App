@@ -89,9 +89,7 @@ import {
 import { parseSpokenBibleReference, type ParsedSpokenReference } from '@/lib/spoken-bible-parser';
 import { PRESENTATION_COLORS, saveScriptureAppearance, useScriptureAppearance } from '@/lib/scripture-appearance';
 
-import { isTauri } from '@tauri-apps/api/core';
-import { BaseDirectory } from '@tauri-apps/api/path';
-import { mkdir, writeTextFile } from '@tauri-apps/plugin-fs';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 
 const logo = { url: '/selah-logo.png' };
 const DEFAULT_BIBLE_ID = import.meta.env.VITE_SCRIPTURE_BIBLE_ID || 'de4e12af7f28f599-01';
@@ -225,6 +223,7 @@ export function Studio() {
   const [isMediaExplorerOpen, setIsMediaExplorerOpen] = useState(false);
   const [mediaBackground, setMediaBackground] = useState('/backgrounds/motion/Blue Particles.mp4');
   const [mediaBackgroundType, setMediaBackgroundType] = useState<'image' | 'video'>('video');
+  const [backgroundDim, setBackgroundDim] = useState(75);
   // Handle Custom Uploads for Scripture
   function handleUploadScriptureAsset(e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') {
     const file = e.target.files?.[0];
@@ -440,6 +439,7 @@ export function Studio() {
       mediaBackground,
       mediaBackgroundType,
       scriptureBackgroundType,
+      backgroundDim,
     };
 
     const jsonString = JSON.stringify(payload, null, 2);
@@ -447,15 +447,13 @@ export function Studio() {
     if (isTauri()) {
       try {
         const safeName = currentScheduleName.trim().replace(/[<>:"/\\|?*]/g, '-').replace(/\.+$/g, '') || 'Service Schedule';
-        const folder = 'SelahStudio/Schedules';
-        await mkdir(folder, { baseDir: BaseDirectory.Document, recursive: true });
-        await writeTextFile(`${folder}/${safeName}.selah`, jsonString, { baseDir: BaseDirectory.Document });
+        const savedPath = await invoke<string>('save_schedule', { name: safeName, contents: jsonString });
         rememberSchedule(payload);
         setIsDirty(false);
-        setNotice(`Schedule saved to Documents/${folder}/${safeName}.selah.`);
+        setNotice(`Schedule saved to ${savedPath}.`);
       } catch (error) {
         console.error('Could not save schedule to the Selah Studio schedules folder.', error);
-        setNotice('Could not save the schedule in Documents/SelahStudio/Schedules.');
+        setNotice(`Could not save the schedule: ${error instanceof Error ? error.message : String(error)}`);
       }
       return;
     }
@@ -507,6 +505,7 @@ export function Studio() {
     if (payload.scriptureBackgroundType) setScriptureBackgroundType(payload.scriptureBackgroundType);
     if (payload.mediaBackground) setMediaBackground(payload.mediaBackground);
     if (payload.mediaBackgroundType) setMediaBackgroundType(payload.mediaBackgroundType);
+    if (typeof payload.backgroundDim === 'number') setBackgroundDim(Math.max(0, Math.min(100, payload.backgroundDim)));
     if (payload.name) setCurrentScheduleName(payload.name);
 
     setSelected(0);
@@ -702,6 +701,11 @@ export function Studio() {
   }, [output, setStoreLive]);
 
   useEffect(() => {
+    setOutput((current) => current.backgroundDim === backgroundDim ? current : { ...current, backgroundDim });
+  }, [backgroundDim]);
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
     const bc = new BroadcastChannel('selah_projector_channel');
     channel.current = bc;
     bc.onmessage = (event) => {
@@ -710,7 +714,7 @@ export function Studio() {
       }
     };
     return () => {
-      bc.close();
+      bc?.close();
     };
   }, []);
 
@@ -730,6 +734,7 @@ export function Studio() {
         if (preferences.scriptureBackgroundType) setScriptureBackgroundType(preferences.scriptureBackgroundType);
         if (preferences.mediaBackground) setMediaBackground(preferences.mediaBackground);
         if (preferences.mediaBackgroundType) setMediaBackgroundType(preferences.mediaBackgroundType);
+        if (typeof preferences.backgroundDim === 'number') setBackgroundDim(Math.max(0, Math.min(100, preferences.backgroundDim)));
         if (preferences.outputName) setOutputName(preferences.outputName);
         setThemeLoaded(true);
         setPreferencesLoaded(true);
@@ -1337,6 +1342,20 @@ export function Studio() {
       scriptureBackgroundType: nextScriptureType,
       mediaBackground: nextMedia,
       mediaBackgroundType: nextMediaType,
+      backgroundDim,
+      outputName,
+    });
+  }
+
+  function setAndSaveBackgroundDim(value: number) {
+    setBackgroundDim(value);
+    void saveWorkspacePreferences({
+      autoPush,
+      scriptureBackground,
+      scriptureBackgroundType,
+      mediaBackground,
+      mediaBackgroundType,
+      backgroundDim: value,
       outputName,
     });
   }
@@ -1496,10 +1515,55 @@ export function Studio() {
     }
   }
 
-  function launchProjector() {
-    const win = window.open('/projector', 'selah-projector', 'popup=yes,width=1280,height=720');
-    if (!win) setNotice('Allow pop-up windows to open your projector');
-    else setNotice('Projector window opened. Move to external display.');
+  async function launchProjector() {
+    if (!isTauri()) {
+      const win = window.open('/projector', 'selah-projector', 'popup=yes,width=1280,height=720');
+      if (!win) setNotice('Allow pop-up windows to open your projector');
+      else setNotice('Projector window opened. Move it to the extended display and enter fullscreen.');
+      return;
+    }
+
+    try {
+      const [{ WebviewWindow }, { availableMonitors, currentMonitor }] = await Promise.all([
+        import('@tauri-apps/api/webviewWindow'),
+        import('@tauri-apps/api/window'),
+      ]);
+      const [monitors, activeMonitor] = await Promise.all([
+        availableMonitors(),
+        currentMonitor(),
+      ]);
+      const externalMonitor = monitors.find((monitor) =>
+        activeMonitor && (monitor.position.x !== activeMonitor.position.x || monitor.position.y !== activeMonitor.position.y),
+      );
+      let projectorWindow = await WebviewWindow.getByLabel('projector');
+
+      if (!projectorWindow) {
+        projectorWindow = new WebviewWindow('projector', {
+          url: '/projector',
+          title: 'Selah Studio Projector',
+          width: 1280,
+          height: 720,
+          decorations: false,
+          visible: false,
+        });
+        await new Promise<void>((resolve, reject) => {
+          projectorWindow!.once('tauri://created', () => resolve());
+          projectorWindow!.once('tauri://error', (event) => reject(new Error(String(event.payload))));
+        });
+      }
+
+      if (externalMonitor) {
+        await projectorWindow.setFullscreenOnMonitor(externalMonitor.position);
+      }
+      await projectorWindow.show();
+      await projectorWindow.setFocus();
+      setNotice(externalMonitor
+        ? 'Projector output is fullscreen on the extended display.'
+        : 'Projector opened. Connect or extend a second display to send output there.');
+    } catch (error) {
+      console.error('Could not open the projector output window.', error);
+      setNotice('Could not open the projector window. Close any existing projector window and try again.');
+    }
   }
 
   const isLive = output.mode === 'normal';
@@ -1535,26 +1599,25 @@ export function Studio() {
                 }}
                 onPointerUp={voice.stop}
                 onPointerCancel={voice.stop}
+                onClick={(event) => {
+                  // Native Enter-key activation has no pointer event and should
+                  // still work as an accessible start/stop control.
+                  if (event.detail === 0) {
+                    if (voice.listening) voice.stop();
+                    else voice.start();
+                  }
+                }}
                 title="Hold Space or click to speak Bible verse"
               >
                 <Mic size={14} />
                 <span>{voice.status || (voice.transcribing ? 'Preparing…' : listening ? 'Listening…' : 'Push to Talk')}</span>
               </button>
-              <div className="ml-2 flex items-center rounded-full border border-white/10 bg-black/20 p-0.5" aria-label="Speech recognition mode">
-                {(['offline', 'online'] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    aria-pressed={voice.mode === mode}
-                    onClick={() => voice.setMode(mode)}
-                    className={`rounded-full px-2.5 py-1 text-[10px] font-semibold capitalize transition-colors ${voice.mode === mode ? 'bg-primary/20 text-primary' : 'text-slate-400 hover:text-white'}`}
-                    title={mode === 'offline' ? 'Runs Whisper on this device; downloads its model once' : 'Uses the configured transcription API'}
-                  >
-                    {mode}
-                  </button>
-                ))}
-              </div>
-              {voice.error && <span role="alert" className="ml-2 max-w-56 text-[11px] text-rose-300">{voice.error}</span>}
+              {voice.error && (
+                <div className="voice-error-popover" role="alert">
+                  <strong>Push to Talk</strong>
+                  <span>{voice.error}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1859,29 +1922,29 @@ export function Studio() {
 
               {tab === 'Scriptures' && (
                 <>
-                  <div className="subsection-title flex items-center justify-between">
+                  <div className="subsection-title">
                     <span>KEYWORD / PASSAGE SEARCH</span>
-                    <div className="bible-version-switcher" role="group" aria-label="Bible translation">
-                      {Object.entries(BIBLE_TRANSLATIONS).map(([key, trans]) => (
-                        <button
-                          key={key}
-                          type="button"
-                          className={`bible-version-button ${selectedTranslation === key ? 'active' : ''}`}
-                          aria-pressed={selectedTranslation === key}
-                          onClick={() => {
-                            setSelectedTranslation(key);
-                            setNotice(`${trans.label} selected; loading the current passage.`);
-                            if (validNumber(chapter, getMaxChapters(book)) && highlightedVerses.length) {
-                              void displayHighlightedVerses(autoPush, key);
-                            }
-                          }}
-                          title={trans.isOffline ? 'King James Version (available offline)' : `Load ${trans.label} from API.Bible`}
-                        >
-                          <span>{key}</span>
-                          {trans.isOffline && <small>OFFLINE</small>}
-                        </button>
-                      ))}
-                    </div>
+                  </div>
+                  <div className="bible-version-switcher" role="group" aria-label="Bible translation">
+                    {Object.entries(BIBLE_TRANSLATIONS).map(([key, trans]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        className={`bible-version-button ${selectedTranslation === key ? 'active' : ''}`}
+                        aria-pressed={selectedTranslation === key}
+                        onClick={() => {
+                          setSelectedTranslation(key);
+                          setNotice(`${trans.label} selected; loading the current passage.`);
+                          if (validNumber(chapter, getMaxChapters(book)) && highlightedVerses.length) {
+                            void displayHighlightedVerses(autoPush, key);
+                          }
+                        }}
+                        title={trans.isOffline ? 'King James Version (available offline)' : `Load ${trans.label} from API.Bible`}
+                      >
+                        <span>{key}</span>
+                        {trans.isOffline && <small>OFFLINE</small>}
+                      </button>
+                    ))}
                   </div>
 
                   <details className="scripture-appearance-panel">
@@ -2188,6 +2251,16 @@ export function Studio() {
                       <div><span>ACTIVE SONG / SERMON BACKGROUND</span><strong>{mediaBackground.split('/').pop()}</strong></div>
                     </div>
                   </div>
+                  <div className="background-dim-control">
+                    <div className="background-dim-heading"><strong>Background dim</strong><span>{backgroundDim}%</span></div>
+                    <div className="background-dim-options" role="group" aria-label="Background dim level">
+                      {[0, 25, 50, 75, 100].map((level) => (
+                        <button key={level} type="button" aria-pressed={backgroundDim === level} onClick={() => setAndSaveBackgroundDim(level)}>
+                          {level}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex flex-col gap-2">
                     <SectionLabel icon={<ImageIcon size={14} />}>ADD STANDALONE MEDIA</SectionLabel>
                     <p className="text-[11px] text-slate-400">Images and videos become their own deck slides. Video uploads are limited to 200 MB.</p>
@@ -2408,7 +2481,7 @@ export function Studio() {
                 </div>
 
                 <div className="monitor-screen-wrap flex-1 flex items-center justify-center bg-black/60 rounded-md overflow-hidden p-1">
-                  <SlideScreen slide={activeSlide} transitionMode={transitionMode} />
+                  <SlideScreen slide={activeSlide} transitionMode={transitionMode} backgroundDim={backgroundDim} />
                 </div>
 
                 <div className="monitor-footer py-1 px-1 flex items-center justify-between mt-2">
@@ -2473,7 +2546,7 @@ export function Studio() {
                 </div>
 
                 <div className="monitor-screen-wrap flex-1 flex items-center justify-center bg-black/60 rounded-md overflow-hidden p-1">
-                  <SlideScreen slide={output.slide} mode={output.mode} transitionMode={output.transitionMode ?? transitionMode} />
+                  <SlideScreen slide={output.slide} mode={output.mode} transitionMode={output.transitionMode ?? transitionMode} backgroundDim={output.backgroundDim ?? backgroundDim} />
                 </div>
 
                 <div className="monitor-footer py-1 px-1 flex items-center justify-between mt-2">
@@ -2681,7 +2754,7 @@ export function Studio() {
                 <Settings2 size={24} />
               </div>
               <SheetTitle>Studio Preferences</SheetTitle>
-              <SheetDescription>Configure displays, themes, and offline behavior.</SheetDescription>
+              <SheetDescription>Configure displays, themes, and presentation behavior.</SheetDescription>
             </SheetHeader>
             <div className="settings-section">
               <SectionLabel>APPEARANCE ACCENT</SectionLabel>
@@ -2768,18 +2841,18 @@ export function Projector() {
     } catch {
       // Local fallback
     }
-    return { slide: welcomeSlide, mode: 'normal' };
+    return { slide: welcomeSlide, mode: 'normal', backgroundDim: 75 };
   });
 
   useEffect(() => {
-    const bc = new BroadcastChannel('selah_projector_channel');
-    const requestCurrentOutput = () => bc.postMessage({ type: 'request' });
-    bc.onmessage = (event) => {
+    const bc = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('selah_projector_channel');
+    const requestCurrentOutput = () => bc?.postMessage({ type: 'request' });
+    if (bc) bc.onmessage = (event) => {
       if (event.data?.type === 'output' && event.data.output?.slide) setOutput(event.data.output);
       if (event.data?.type === 'request') {
         try {
           const cached = localStorage.getItem('selah-projector-latest');
-          if (cached) bc.postMessage({ type: 'output', output: JSON.parse(cached) as OutputState });
+          if (cached) bc?.postMessage({ type: 'output', output: JSON.parse(cached) as OutputState });
         } catch {
           // fallback
         }
@@ -2803,13 +2876,13 @@ export function Projector() {
       window.removeEventListener('storage', recover);
       window.removeEventListener('pageshow', requestCurrentOutput);
       document.removeEventListener('visibilitychange', requestCurrentOutput);
-      bc.close();
+      bc?.close();
     };
   }, []);
 
   return (
     <div className="projector-view">
-      <SlideScreen slide={output.slide} mode={output.mode} transitionMode={output.transitionMode ?? "blur-words"} />
+      <SlideScreen slide={output.slide} mode={output.mode} transitionMode={output.transitionMode ?? "blur-words"} backgroundDim={output.backgroundDim ?? 75} />
       <Button
         variant="ghost"
         size="icon"

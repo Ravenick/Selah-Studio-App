@@ -12,6 +12,7 @@ export type OutputState = {
   slide: Slide;
   mode: 'normal' | 'blackout' | 'clear' | 'logo';
   transitionMode?: 'cold' | 'fade' | 'blur-words';
+  backgroundDim?: number;
 };
 
 export const welcomeSlide: Slide = {
@@ -178,11 +179,13 @@ export function SlideScreen({
   mode = 'normal',
   transitionMode = 'fade',
   className = '',
+  backgroundDim = 75,
 }: {
   slide: Slide;
   mode?: 'normal' | 'blackout' | 'clear' | 'logo';
   transitionMode?: 'cold' | 'fade' | string;
   className?: string;
+  backgroundDim?: number;
 }) {
   // 1. Safe transition class definition (Fixes 'stageClass is not defined')
   const stageClass = transitionMode === 'cold' ? 'selah-transition-cold' : 'selah-transition-fade';
@@ -286,7 +289,7 @@ export function SlideScreen({
           ) : (
             <img src={hasBackground && (background?.startsWith('blob:') || background?.startsWith('https:') || background?.startsWith('/')) ? background : mountain.url} alt="" width={1536} height={864} className={`screen-background ${slide.background?.startsWith('tone-') ? slide.background : ''}`} />
           )}
-          <div className="screen-scrim" />
+          <div className="screen-scrim" style={{ opacity: Math.max(0, Math.min(100, backgroundDim)) / 100 }} />
         </>
       )}
       {mode === 'logo' ? (

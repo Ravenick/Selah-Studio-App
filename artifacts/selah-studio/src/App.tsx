@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
@@ -16,16 +16,19 @@ import {
 const queryClient = new QueryClient();
 
 function Router() {
+  const RootPage = __SELAH_TAURI_BUILD__ ? Studio : lazy(() => import('@/pages/web-home'));
   return (
     // Keep a shared shell (sidebar, navbar) outside the boundary so it
     // survives a page crash.
     <RoutedErrorBoundary>
-      <Switch>
-        <Route path="/" component={Studio} />
-        <Route path="/studio" component={Studio} />
-        <Route path="/projector" component={Projector} />
-        <Route component={NotFound} />
-      </Switch>
+      <Suspense fallback={null}>
+        <Switch>
+          <Route path="/" component={RootPage} />
+          <Route path="/studio" component={Studio} />
+          <Route path="/projector" component={Projector} />
+          <Route component={NotFound} />
+        </Switch>
+      </Suspense>
     </RoutedErrorBoundary>
   );
 }

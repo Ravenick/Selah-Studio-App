@@ -7,9 +7,14 @@ import { isTauri } from '@tauri-apps/api/core';
 
 import './index.css';
 
-const apiBase = isTauri() && !import.meta.env.DEV
-  ? import.meta.env.VITE_TAURI_API_BASE_URL
-  : import.meta.env.VITE_API_BASE_URL;
+// In dev, use Vite's same-origin /api proxy. This also works when the app is
+// opened from another device on the LAN; a baked-in localhost URL points there
+// to the visitor's computer instead of the machine hosting the API.
+const apiBase = import.meta.env.DEV
+  ? undefined
+  : isTauri()
+    ? import.meta.env.VITE_TAURI_API_BASE_URL
+    : import.meta.env.VITE_API_BASE_URL;
 const configuredApiBase = apiBase?.trim().replace(/\/+$/, '');
 if (configuredApiBase) setBaseUrl(configuredApiBase);
 
