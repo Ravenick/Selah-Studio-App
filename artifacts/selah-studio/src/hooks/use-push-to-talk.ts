@@ -93,14 +93,25 @@ export function usePushToTalk(onTranscript: (text: string) => void) {
         setTranscribing(true);
         try {
           const result = await mutation.mutateAsync({ data: audio });
-          if (result.text.trim()) {
-            latestTranscript.current = result.text.trim();
-            onTranscript(result.text.trim());
+          const transcript = typeof result?.text === 'string' ? result.text.trim() : '';
+          if (transcript) {
+            latestTranscript.current = transcript;
+            onTranscript(transcript);
           } else {
             setError('No words were detected. Try speaking closer to the microphone.');
           }
-        } catch {
-          setError('Audio transcription failed. Check your connection and try again.');
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '';
+          const hasApiBase = Boolean(
+            import.meta.env.VITE_TAURI_API_BASE_URL?.trim() || import.meta.env.VITE_API_BASE_URL?.trim(),
+          );
+          if (isTauri() && !hasApiBase) {
+            setError('Online transcription is not configured in this desktop build. Set the VITE_TAURI_API_BASE_URL GitHub repository variable to your Render API URL, then rebuild.');
+          } else if (message && !/failed to fetch|networkerror|load failed/i.test(message)) {
+            setError(message);
+          } else {
+            setError('Audio transcription could not reach the API. Check the Render service URL and its HF_ACCESS_TOKEN setting, then try again.');
+          }
         } finally {
           setTranscribing(false);
         }

@@ -13,8 +13,8 @@ import './index.css';
 const apiBase = import.meta.env.DEV
   ? undefined
   : isTauri()
-    ? import.meta.env.VITE_TAURI_API_BASE_URL
-    : import.meta.env.VITE_API_BASE_URL;
+    ? import.meta.env.VITE_TAURI_API_BASE_URL?.trim() || import.meta.env.VITE_API_BASE_URL?.trim()
+    : import.meta.env.VITE_API_BASE_URL?.trim();
 const configuredApiBase = apiBase?.trim().replace(/\/+$/, '');
 if (configuredApiBase) setBaseUrl(configuredApiBase);
 

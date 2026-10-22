@@ -53,6 +53,7 @@ import {
   Link2,
 } from 'lucide-react';
 import { Button, type ButtonProps } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { getChapter, matchingBooks, resolveBook, validChapter, validNumber, getMaxChapters, getMaxVerses, bibleBooks } from '@/lib/studio-workflows';
@@ -420,6 +421,9 @@ export function Studio() {
   // Schedule state & dirty tracking
   const [isDirty, setIsDirty] = useState(false);
   const [currentScheduleName, setCurrentScheduleName] = useState('Sunday_Worship_Service');
+  const [newScheduleOpen, setNewScheduleOpen] = useState(false);
+  const [newScheduleName, setNewScheduleName] = useState('');
+  const [newScheduleError, setNewScheduleError] = useState('');
   const [recentSchedules, setRecentSchedules] = useState<
     Array<{ id: string; name: string; savedAt: string; payload: any }>
   >([]);
@@ -451,13 +455,15 @@ export function Studio() {
 
   // Save Schedule to computer (.selah JSON)
   async function handleSaveSchedule() {
+    const scheduledSongs = song.title && mediaDeckSlides.some((slide) => slide.title === song.title) ? [song] : [];
     const payload = {
       version: '1.0',
       timestamp: new Date().toISOString(),
       name: currentScheduleName,
       slides: slides.filter((slide) => slide.kind !== 'media' || slide.mediaType === 'youtube'),
       mediaDeckSlides: mediaDeckSlides.filter((slide) => slide.kind !== 'media' || slide.mediaType === 'youtube'),
-      song,
+      song: scheduledSongs[0] ?? null,
+      songs: scheduledSongs,
       scriptureBackground,
       mediaBackground,
       mediaBackgroundType,
@@ -519,11 +525,76 @@ export function Studio() {
     setIsDirty(false);
   }
 
+  async function createNewSchedule() {
+    const name = newScheduleName.trim();
+    if (!name) {
+      setNewScheduleError('Enter a name for this schedule.');
+      return;
+    }
+
+    const timestamp = new Date().toISOString();
+    const payload = {
+      version: '1.0',
+      timestamp,
+      name,
+      slides: [] as Slide[],
+      mediaDeckSlides: [] as Slide[],
+      song: null,
+      songs: [] as Song[],
+      scriptureBackground,
+      mediaBackground,
+      mediaBackgroundType,
+      scriptureBackgroundType,
+      backgroundDim,
+    };
+
+    if (isTauri()) {
+      try {
+        const savedPath = await invoke<string>('create_schedule', {
+          name,
+          contents: JSON.stringify(payload, null, 2),
+        });
+        setNotice(`New schedule created at ${savedPath}.`);
+      } catch (error) {
+        setNewScheduleError(error instanceof Error ? error.message : String(error));
+        return;
+      }
+    } else {
+      setNotice('New schedule started. Save it to download the .selah file.');
+    }
+
+    setCurrentScheduleName(name);
+    setSlides([]);
+    setMediaDeckSlides([]);
+    setSelected(0);
+    setSelectedMediaDeckIdx(null);
+    setLyrics('');
+    setSong({ title: '', author: '', tag: '', lyrics: [] });
+    setIsDirty(!isTauri());
+    rememberSchedule(payload);
+    setNewScheduleOpen(false);
+    setNewScheduleName('');
+    setNewScheduleError('');
+  }
+
   // Load schedule from computer file or recent drawer
   function applySchedulePayload(payload: any) {
     if (payload.slides) setSlides(payload.slides);
     if (payload.mediaDeckSlides) setMediaDeckSlides(payload.mediaDeckSlides);
-    if (payload.song) setSong(payload.song);
+    const scheduleSongs = Array.isArray(payload.songs) && payload.songs.length
+      ? payload.songs.filter((item: unknown): item is Song => Boolean(item && typeof item === 'object' && typeof (item as Song).title === 'string'))
+      : payload.song && typeof payload.song.title === 'string' ? [payload.song as Song] : [];
+    const primarySong = scheduleSongs[0];
+    setSong(primarySong ?? { title: '', author: '', tag: '', lyrics: [] });
+    if (scheduleSongs.length) {
+      setLibrarySongs((current) => [
+        ...current.filter((existing) => !scheduleSongs.some((incoming) => incoming.title === existing.title && incoming.kind === existing.kind)),
+        ...scheduleSongs,
+      ]);
+      void Promise.all(scheduleSongs.map((item) => saveLocalSong(item))).catch((error) => {
+        console.warn('Could not save schedule songs into the local library.', error);
+      });
+    }
     if (payload.scriptureBackground) setScriptureBackground(payload.scriptureBackground);
     if (payload.scriptureBackgroundType) setScriptureBackgroundType(payload.scriptureBackgroundType);
     if (payload.mediaBackground) setMediaBackground(payload.mediaBackground);
@@ -1105,7 +1176,7 @@ export function Studio() {
 
   function handleEditSong(targetSong: Song, e: React.MouseEvent) {
     e.stopPropagation();
-    setBuilderMode('song');
+    setBuilderMode(targetSong.kind === 'sermon' ? 'sermon' : 'song');
     setBuilderSong(targetSong);
     setBuilderOpen(true);
   }
@@ -1746,7 +1817,7 @@ export function Studio() {
             <span className="service-icon">
               <ListMusic size={16} />
             </span>
-            <strong>Sunday Worship Service</strong>
+            <strong>{currentScheduleName.replace(/[_-]+/g, ' ')}</strong>
             <div className="flex items-center gap-2">
               <input
                 ref={fileInputRef}
@@ -1755,6 +1826,14 @@ export function Studio() {
                 className="hidden"
                 onChange={handleImportSchedule}
               />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1 bg-white/5 border-white/10 hover:bg-white/10"
+                onClick={() => { setNewScheduleName(''); setNewScheduleError(''); setNewScheduleOpen(true); }}
+              >
+                <Plus size={12} /> New Schedule
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
@@ -2325,6 +2404,12 @@ export function Studio() {
 
               {tab === 'Schedules' && (
                 <div className="flex flex-col gap-2">
+                  <Button
+                    className="w-full h-9 justify-center gap-2 font-semibold"
+                    onClick={() => { setNewScheduleName(''); setNewScheduleError(''); setNewScheduleOpen(true); }}
+                  >
+                    <Plus size={14} /> New Schedule
+                  </Button>
                   <SectionLabel icon={<ListMusic size={14} />}>RECENT SCHEDULES (QUICK ACCESS)</SectionLabel>
                   {recentSchedules.length === 0 ? (
                     <p className="text-xs text-slate-400 p-2">No recent schedules saved yet.</p>
@@ -2730,6 +2815,31 @@ export function Studio() {
             </div>
           </div>
         )}
+        <Dialog open={newScheduleOpen} onOpenChange={(open) => { setNewScheduleOpen(open); if (!open) setNewScheduleError(''); }}>
+          <DialogContent className="schedule-create-dialog">
+            <DialogHeader>
+              <DialogTitle>Start a new schedule</DialogTitle>
+              <DialogDescription>Name this service workspace. Selah Studio will create a .selah file in Documents/SelahStudio/Schedule on desktop.</DialogDescription>
+            </DialogHeader>
+            <label className="schedule-create-field">
+              <span>Schedule name</span>
+              <input
+                autoFocus
+                value={newScheduleName}
+                onChange={(event) => { setNewScheduleName(event.target.value); setNewScheduleError(''); }}
+                onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void createNewSchedule(); } }}
+                placeholder="Sunday Worship Service"
+                aria-invalid={Boolean(newScheduleError)}
+              />
+            </label>
+            {newScheduleError && <p className="schedule-create-error" role="alert">{newScheduleError}</p>}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setNewScheduleOpen(false)}>Cancel</Button>
+              <Button onClick={() => void createNewSchedule()} disabled={!newScheduleName.trim()}>Create Schedule</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {builderOpen && (
           <SongBuilder
             mode={builderMode}

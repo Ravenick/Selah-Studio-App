@@ -6076,6 +6076,49 @@ h1 {
 .song-builder .builder-heading h2 { font-size: 20px; }
 .song-builder .builder-eyebrow { margin-bottom: 4px; }
 .song-builder .builder-fixed-stylebar { flex: 0 0 auto; }
+
+.schedule-create-dialog {
+  width: min(460px, calc(100vw - 32px));
+  border: 1px solid color-mix(in oklab, var(--primary) 28%, var(--border));
+  background: color-mix(in oklab, var(--surface) 94%, #090e16);
+  color: var(--foreground);
+  box-shadow: 0 24px 80px #0009, 0 0 28px color-mix(in oklab, var(--primary) 10%, transparent);
+}
+
+.schedule-create-field {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0 4px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.schedule-create-field input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in oklab, var(--primary) 28%, var(--border));
+  border-radius: 9px;
+  outline: none;
+  background: color-mix(in oklab, var(--surface-raised) 82%, #090e16);
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+
+.schedule-create-field input:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 20%, transparent);
+}
+
+.schedule-create-field input[aria-invalid="true"] { border-color: var(--destructive); }
+.schedule-create-error { margin: 4px 0 0; color: var(--destructive); font-size: 12px; }
 .song-builder .builder-body {
   flex: 1 1 auto;
   grid-template-columns: minmax(230px, .82fr) minmax(300px, 1.08fr) minmax(300px, 1fr);

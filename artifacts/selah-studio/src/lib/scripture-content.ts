@@ -1,6 +1,9 @@
 export type ParsedBibleContent = { verses: string[]; verseNumbers: number[] };
 
-export function parseBibleContent(content: string): ParsedBibleContent {
+export function parseBibleContent(content: unknown): ParsedBibleContent {
+  if (typeof content !== 'string') {
+    throw new Error('The scripture service returned a passage without readable text. Check the API service and selected translation access.');
+  }
   const plainText = content
     .replace(/<br\s*\/?>/gi, ' ')
     .replace(/<\/(?:p|div|article|section)>/gi, ' ')
