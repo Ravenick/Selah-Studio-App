@@ -31,6 +31,10 @@ export function parseSpokenBibleReference(rawText: string): ParsedSpokenReferenc
     .replace(/\s+/g, ' ')
     .trim();
 
+  // Voice recognition often returns the common spoken alias “Revelations”.
+  // The canonical Bible book name is singular, so normalize it before lookup.
+  text = text.replace(/\brevelations\b/g, 'revelation');
+
   // 2. Resolve target Bible book
   let matchedBook = '';
   let remaining = '';
