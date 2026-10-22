@@ -6224,6 +6224,37 @@ h1 {
   box-shadow: 0 0 0 5px color-mix(in oklab, var(--primary) 14%, transparent);
 }
 
+/* Tailwind's bg-primary expects an HSL token, while the studio theme uses a
+   direct CSS color. Keep upload controls tied to the studio accent explicitly. */
+.studio .media-upload-button {
+  color: var(--primary-foreground) !important;
+  background: var(--primary) !important;
+  border: 1px solid color-mix(in oklab, var(--primary) 82%, white) !important;
+  box-shadow: 0 4px 15px color-mix(in oklab, var(--primary) 22%, transparent);
+  transition: background 150ms ease, color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+.studio .media-upload-button:hover,
+.studio .media-upload-button:focus-visible {
+  color: var(--primary-foreground) !important;
+  background: color-mix(in oklab, var(--primary) 82%, white) !important;
+  border-color: color-mix(in oklab, var(--primary) 75%, white) !important;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 18%, transparent), 0 7px 20px color-mix(in oklab, var(--primary) 32%, transparent);
+  transform: translateY(-1px);
+}
+.studio .background-upload-button {
+  color: var(--foreground) !important;
+  border-color: color-mix(in oklab, var(--primary) 32%, var(--border)) !important;
+  background: color-mix(in oklab, var(--primary) 8%, var(--surface)) !important;
+  transition: color 150ms ease, border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+.studio .background-upload-button:hover,
+.studio .background-upload-button:focus-visible {
+  color: var(--primary-foreground) !important;
+  border-color: var(--primary) !important;
+  background: var(--primary) !important;
+  box-shadow: 0 0 12px color-mix(in oklab, var(--primary) 28%, transparent);
+}
+
 /* DialogContent's Tailwind defaults cap every dialog at max-w-lg and add grid/padding.
    This builder owns a three-pane desktop layout, so explicitly clear those defaults. */
 .song-builder {

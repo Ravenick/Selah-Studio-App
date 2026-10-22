@@ -1562,17 +1562,18 @@ export function Studio() {
         });
       }
 
+      await projectorWindow.show();
       if (externalMonitor) {
         await projectorWindow.setFullscreenOnMonitor(externalMonitor.position);
       }
-      await projectorWindow.show();
       await projectorWindow.setFocus();
       setNotice(externalMonitor
         ? 'Projector output is fullscreen on the extended display.'
         : 'Projector opened. Connect or extend a second display to send output there.');
     } catch (error) {
       console.error('Could not open the projector output window.', error);
-      setNotice('Could not open the projector window. Close any existing projector window and try again.');
+      const detail = error instanceof Error ? error.message : String(error);
+      setNotice(`Projector failed to open: ${detail.slice(0, 140)}`);
     }
   }
 
@@ -2285,7 +2286,7 @@ export function Studio() {
                     <SectionLabel icon={<ImageIcon size={14} />}>ADD STANDALONE MEDIA</SectionLabel>
                     <p className="text-[11px] text-slate-400">Images and videos become their own deck slides. Video uploads are limited to 200 MB.</p>
                     <input ref={standaloneMediaInputRef} type="file" accept="image/*,video/mp4,video/quicktime,video/webm" className="hidden" onChange={handleStandaloneMediaUpload} />
-                    <Button className="w-full h-9 bg-primary text-black font-bold text-xs" onClick={() => standaloneMediaInputRef.current?.click()}>
+                    <Button className="media-upload-button w-full h-9 font-bold text-xs" onClick={() => standaloneMediaInputRef.current?.click()}>
                       <Upload size={14} className="mr-1.5" /> Upload Image or Video
                     </Button>
                     <div className="flex gap-2">
@@ -2682,7 +2683,7 @@ export function Studio() {
                         <a href="https://storyloop.com/site/freebies" target="_blank" rel="noreferrer" className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
                           Story Loop <ExternalLink size={9} />
                         </a>
-                        <Button size="sm" variant="outline" className="h-5 text-[9px] px-1.5 gap-1 bg-white/5 border-white/10" onClick={() => mediaMotionInputRef.current?.click()}>
+                        <Button size="sm" variant="outline" className="background-upload-button h-5 text-[9px] px-1.5 gap-1 bg-white/5 border-white/10" onClick={() => mediaMotionInputRef.current?.click()}>
                           <Upload size={9} /> Upload Loop
                         </Button>
                       </div>
@@ -2700,7 +2701,7 @@ export function Studio() {
                         <a href="https://www.churchmotiongraphics.com/free-worship-media/" target="_blank" rel="noreferrer" className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
                           CMG Stills <ExternalLink size={9} />
                         </a>
-                        <Button size="sm" variant="outline" className="h-5 text-[9px] px-1.5 gap-1 bg-white/5 border-white/10" onClick={() => mediaStillInputRef.current?.click()}>
+                        <Button size="sm" variant="outline" className="background-upload-button h-5 text-[9px] px-1.5 gap-1 bg-white/5 border-white/10" onClick={() => mediaStillInputRef.current?.click()}>
                           <Upload size={9} /> Upload Still
                         </Button>
                       </div>
