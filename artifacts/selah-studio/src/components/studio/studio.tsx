@@ -273,41 +273,55 @@ export function Studio() {
 
   // Standalone media is a deck item, not a background applied behind lyrics.
   async function handleStandaloneMediaUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []);
     e.target.value = '';
-    if (!file) return;
-    if (file.size > 200 * 1024 * 1024) {
-      setNotice('Media files must be 200 MB or smaller.');
-      return;
-    }
-    const isVideo = file.type.startsWith('video/');
-    if (!file.type.startsWith('image/') && !isVideo) {
-      setNotice('Choose an image, GIF, MP4, MOV, or WebM file.');
-      return;
-    }
+    if (!files.length) return;
     try {
-      const stored = await stashBackground(file);
-      const mediaSlide: Slide = {
-        id: `media-${stored.id}`,
-        title: file.name,
-        label: isVideo ? 'Video' : 'Image',
-        text: '',
-        kind: 'media',
-        mediaUrl: `local-background:${stored.id}`,
-        mediaType: isVideo ? 'video' : 'image',
-        audioMuted: true,
-      };
+      const additions: Slide[] = [];
+      let skippedTooLarge = 0;
+      let skippedInvalid = 0;
+      for (const file of files) {
+        if (file.size > 200 * 1024 * 1024) {
+          skippedTooLarge++;
+          continue;
+        }
+        const isVideo = file.type.startsWith('video/');
+        if (!file.type.startsWith('image/') && !isVideo) {
+          skippedInvalid++;
+          continue;
+        }
+        const stored = await stashBackground(file);
+        additions.push({
+          id: `media-${stored.id}`,
+          title: file.name,
+          label: isVideo ? 'Video' : 'Image',
+          text: '',
+          kind: 'media',
+          mediaUrl: `local-background:${stored.id}`,
+          mediaType: isVideo ? 'video' : 'image',
+          audioMuted: true,
+        });
+      }
+      if (!additions.length) {
+        setNotice(skippedTooLarge
+          ? 'No files were added. Media files must be 200 MB or smaller.'
+          : 'No supported media files were selected. Choose images, GIFs, MP4, MOV, or WebM files.');
+        return;
+      }
       const mediaOnlyDeck = mediaDeckSlides.filter((item) => item.kind === 'media' && Boolean(item.mediaUrl));
-      const nextDeck = [...mediaOnlyDeck, mediaSlide];
+      const nextDeck = [...mediaOnlyDeck, ...additions];
       const itemIndex = nextDeck.length - 1;
+      const lastAdded = additions[additions.length - 1]!;
       setSlides(nextDeck);
       setMediaDeckSlides(nextDeck);
       setSelected(itemIndex);
       setSelectedMediaDeckIdx(itemIndex);
-      loadPreview(mediaSlide);
-      if (autoPush) broadcast(mediaSlide);
+      loadPreview(lastAdded);
+      if (autoPush) broadcast(lastAdded);
       setIsDirty(true);
-      setNotice(`Added ${isVideo ? 'video' : 'image'} to the presentation deck.`);
+      const skipped = skippedTooLarge + skippedInvalid;
+      const skippedMessage = skipped ? ` ${skipped} unsupported or oversized file(s) skipped.` : '';
+      setNotice(`Added ${additions.length} media item${additions.length === 1 ? '' : 's'} to the presentation deck.${skippedMessage}`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not save this media file.');
     }
@@ -2284,10 +2298,10 @@ export function Studio() {
                   </div>
                   <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex flex-col gap-2">
                     <SectionLabel icon={<ImageIcon size={14} />}>ADD STANDALONE MEDIA</SectionLabel>
-                    <p className="text-[11px] text-slate-400">Images and videos become their own deck slides. Video uploads are limited to 200 MB.</p>
-                    <input ref={standaloneMediaInputRef} type="file" accept="image/*,video/mp4,video/quicktime,video/webm" className="hidden" onChange={handleStandaloneMediaUpload} />
+                    <p className="text-[11px] text-slate-400">Select multiple images or videos to add them as separate deck slides. Each file is limited to 200 MB.</p>
+                    <input ref={standaloneMediaInputRef} type="file" accept="image/*,video/mp4,video/quicktime,video/webm" multiple className="hidden" onChange={handleStandaloneMediaUpload} />
                     <Button className="media-upload-button w-full h-9 font-bold text-xs" onClick={() => standaloneMediaInputRef.current?.click()}>
-                      <Upload size={14} className="mr-1.5" /> Upload Image or Video
+                      <Upload size={14} className="mr-1.5" /> Upload Media
                     </Button>
                     <div className="flex gap-2">
                       <input aria-label="YouTube URL" value={youtubeMediaUrl} onChange={(e) => setYoutubeMediaUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addYoutubeMedia(); } }} placeholder="Paste YouTube / live URL" className="min-w-0 flex-1 h-9 rounded-md border border-white/15 bg-black/40 px-2 text-xs text-white outline-none focus:border-primary" />
