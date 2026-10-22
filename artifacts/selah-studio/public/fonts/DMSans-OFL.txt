@@ -1,0 +1,4 @@
+DM Sans is licensed under the SIL Open Font License 1.1.
+Copyright 2014-2017 Colophon Foundry, Philipp Hubert, Sebastian Fischer.
+
+Bundled as DMSans-latin.woff2 for offline use in Selah Studio.

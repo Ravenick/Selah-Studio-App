@@ -1610,7 +1610,7 @@ export function Studio() {
                 title="Hold Space or click to speak Bible verse"
               >
                 <Mic size={14} />
-                <span>{voice.status || (voice.transcribing ? 'Preparing…' : listening ? 'Listening…' : 'Push to Talk')}</span>
+                <span>{voice.transcribing ? 'Preparing…' : listening ? 'Listening…' : 'Push to Talk'}</span>
               </button>
               {voice.error && (
                 <div className="voice-error-popover" role="alert">

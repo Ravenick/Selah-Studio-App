@@ -4,26 +4,26 @@ import { cn } from '@/lib/utils';
 import { cva, type VariantProps } from 'class-variance-authority';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0' +
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:translate-y-px disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-busy:cursor-wait [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0' +
     ' hover-elevate active-elevate-2',
   {
     variants: {
       variant: {
         default:
           // @replit: no hover, and add primary border
-          'bg-primary text-primary-foreground border border-primary-border',
+          'bg-primary text-primary-foreground border border-primary-border hover:bg-primary/90 hover:shadow-[0_0_18px_color-mix(in_oklab,var(--primary)_20%,transparent)]',
         destructive:
-          'bg-destructive text-destructive-foreground shadow-sm border-destructive-border',
+          'bg-destructive text-destructive-foreground shadow-sm border-destructive-border hover:bg-destructive/90',
         outline:
           // @replit Shows the background color of whatever card / sidebar / accent background it is inside of.
           // Inherits the current text color. Uses shadow-xs. no shadow on active
           // No hover state
-          ' border [border-color:var(--button-outline)] shadow-xs active:shadow-none ',
+          'border [border-color:var(--button-outline)] shadow-xs hover:bg-accent hover:text-accent-foreground hover:border-primary/30 active:shadow-none',
         secondary:
           // @replit border, no hover, no shadow, secondary border.
-          'border bg-secondary text-secondary-foreground border border-secondary-border ',
+          'border bg-secondary text-secondary-foreground border-secondary-border hover:bg-secondary/75 hover:border-primary/30',
         // @replit no hover, transparent border
-        ghost: 'border border-transparent',
+        ghost: 'border border-transparent hover:bg-accent/70 hover:text-accent-foreground',
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {
