@@ -12,6 +12,11 @@ fn schedule_directory(app: &tauri::AppHandle) -> Result<std::path::PathBuf, Stri
     Ok(directory)
 }
 
+#[tauri::command]
+fn prepare_schedules_directory(app: tauri::AppHandle) -> Result<String, String> {
+    schedule_directory(&app).map(|path| path.to_string_lossy().into_owned())
+}
+
 fn safe_schedule_name(name: &str) -> String {
     let sanitized: String = name
         .trim()
@@ -59,8 +64,9 @@ fn create_schedule(name: String, contents: String, app: tauri::AppHandle) -> Res
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .invoke_handler(tauri::generate_handler![save_schedule, create_schedule])
+        .invoke_handler(tauri::generate_handler![save_schedule, create_schedule, prepare_schedules_directory])
         .on_window_event(|window, event| {
             if window.label() == "main" && matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
                 if let Some(projector) = window.app_handle().get_webview_window("projector") {

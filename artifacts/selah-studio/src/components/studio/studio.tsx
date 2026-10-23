@@ -67,11 +67,8 @@ import { useAppStore } from '@/lib/app-store';
 import {
   cachePassage,
   getCachedPassage,
-  readSavedSongs,
   readTheme,
   readWorkspacePreferences,
-  removeLocalSong,
-  saveLocalSong,
   saveTheme,
   saveWorkspacePreferences,
   stashBackground,
@@ -123,6 +120,16 @@ const BIBLE_TRANSLATIONS: Record<string, { label: string; id: string; isOffline?
     id: import.meta.env.VITE_BIBLE_ID_NLT || 'd6e14a625393b4da-01',
   },
 };
+
+function parseBiblePassage(passage: unknown) {
+  if (!passage || typeof passage !== 'object') return parseBibleContent(undefined);
+  const value = passage as { content?: unknown; data?: { content?: unknown } };
+  return parseBibleContent(value.content ?? value.data?.content);
+}
+
+function safeScheduleFileName(name: string) {
+  return name.trim().replace(/[<>:"/\\|?*]/g, '-').replace(/\.+$/g, '') || 'Service Schedule';
+}
 
 function Action({ tip, children, ...props }: ButtonProps & { tip: string }) {
   const testId = `action-${tip.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
@@ -420,7 +427,9 @@ export function Studio() {
   const [builderSong, setBuilderSong] = useState<Song | undefined>();
   // Schedule state & dirty tracking
   const [isDirty, setIsDirty] = useState(false);
-  const [currentScheduleName, setCurrentScheduleName] = useState('Sunday_Worship_Service');
+  const [currentScheduleName, setCurrentScheduleName] = useState(() => {
+    try { return localStorage.getItem('selah-active-schedule-name') || 'Sunday_Worship_Service'; } catch { return 'Sunday_Worship_Service'; }
+  });
   const [newScheduleOpen, setNewScheduleOpen] = useState(false);
   const [newScheduleName, setNewScheduleName] = useState('');
   const [newScheduleError, setNewScheduleError] = useState('');
@@ -455,14 +464,19 @@ export function Studio() {
 
   // Save Schedule to computer (.selah JSON)
   async function handleSaveSchedule() {
-    const scheduledSongs = song.title && mediaDeckSlides.some((slide) => slide.title === song.title) ? [song] : [];
+    const scheduledSongs = librarySongs.filter((item) => item.title.trim());
+    if (song.title && mediaDeckSlides.some((slide) => slide.title === song.title)
+      && !scheduledSongs.some((item) => item.title === song.title && item.kind === song.kind)) {
+      scheduledSongs.push(song);
+    }
+    const activeScheduledSong = scheduledSongs.find((item) => item.title === song.title && item.kind === song.kind) ?? null;
     const payload = {
       version: '1.0',
       timestamp: new Date().toISOString(),
       name: currentScheduleName,
       slides: slides.filter((slide) => slide.kind !== 'media' || slide.mediaType === 'youtube'),
       mediaDeckSlides: mediaDeckSlides.filter((slide) => slide.kind !== 'media' || slide.mediaType === 'youtube'),
-      song: scheduledSongs[0] ?? null,
+      song: activeScheduledSong,
       songs: scheduledSongs,
       scriptureBackground,
       mediaBackground,
@@ -475,11 +489,20 @@ export function Studio() {
 
     if (isTauri()) {
       try {
-        const safeName = currentScheduleName.trim().replace(/[<>:"/\\|?*]/g, '-').replace(/\.+$/g, '') || 'Service Schedule';
-        const savedPath = await invoke<string>('save_schedule', { name: safeName, contents: jsonString });
+        const directory = await invoke<string>('prepare_schedules_directory');
+        const defaultPath = await import('@tauri-apps/api/path').then(({ join }) => join(directory, `${safeScheduleFileName(currentScheduleName)}.selah`));
+        const { save } = await import('@tauri-apps/plugin-dialog');
+        const selectedPath = await save({
+          title: 'Save Selah schedule',
+          defaultPath,
+          filters: [{ name: 'Selah Studio Schedule', extensions: ['selah'] }],
+        });
+        if (!selectedPath) return;
+        const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+        await writeTextFile(selectedPath, jsonString);
         rememberSchedule(payload);
         setIsDirty(false);
-        setNotice(`Schedule saved to ${savedPath}.`);
+        setNotice(`Schedule saved to ${selectedPath}.`);
       } catch (error) {
         console.error('Could not save schedule to the Selah Studio schedules folder.', error);
         setNotice(`Could not save the schedule: ${error instanceof Error ? error.message : String(error)}`);
@@ -564,6 +587,7 @@ export function Studio() {
     }
 
     setCurrentScheduleName(name);
+    setLibrarySongs([...songs]);
     setSlides([]);
     setMediaDeckSlides([]);
     setSelected(0);
@@ -579,22 +603,18 @@ export function Studio() {
 
   // Load schedule from computer file or recent drawer
   function applySchedulePayload(payload: any) {
-    if (payload.slides) setSlides(payload.slides);
-    if (payload.mediaDeckSlides) setMediaDeckSlides(payload.mediaDeckSlides);
-    const scheduleSongs = Array.isArray(payload.songs) && payload.songs.length
+    const scheduleSlides: Slide[] = Array.isArray(payload.slides) ? payload.slides : [];
+    const scheduleDeck: Slide[] = Array.isArray(payload.mediaDeckSlides) ? payload.mediaDeckSlides : scheduleSlides;
+    setSlides(scheduleSlides);
+    setMediaDeckSlides(scheduleDeck);
+    const scheduleSongs: Song[] = Array.isArray(payload.songs) && payload.songs.length
       ? payload.songs.filter((item: unknown): item is Song => Boolean(item && typeof item === 'object' && typeof (item as Song).title === 'string'))
       : payload.song && typeof payload.song.title === 'string' ? [payload.song as Song] : [];
-    const primarySong = scheduleSongs[0];
+    const primarySong = payload.song && typeof payload.song.title === 'string' ? payload.song as Song : scheduleSongs[0];
     setSong(primarySong ?? { title: '', author: '', tag: '', lyrics: [] });
-    if (scheduleSongs.length) {
-      setLibrarySongs((current) => [
-        ...current.filter((existing) => !scheduleSongs.some((incoming) => incoming.title === existing.title && incoming.kind === existing.kind)),
-        ...scheduleSongs,
-      ]);
-      void Promise.all(scheduleSongs.map((item) => saveLocalSong(item))).catch((error) => {
-        console.warn('Could not save schedule songs into the local library.', error);
-      });
-    }
+    setLyrics(Array.isArray(primarySong?.lyrics) ? primarySong.lyrics.join('\n\n') : '');
+    setPendingLibrarySong(null);
+    setLibrarySongs([...songs, ...scheduleSongs.filter((item: Song) => !songs.some((seed) => seed.title === item.title && seed.kind === item.kind))]);
     if (payload.scriptureBackground) setScriptureBackground(payload.scriptureBackground);
     if (payload.scriptureBackgroundType) setScriptureBackgroundType(payload.scriptureBackgroundType);
     if (payload.mediaBackground) setMediaBackground(payload.mediaBackground);
@@ -623,6 +643,30 @@ export function Studio() {
       }
     };
     reader.readAsText(file);
+  }
+
+  async function chooseScheduleFile() {
+    if (!isTauri()) {
+      fileInputRef.current?.click();
+      return;
+    }
+    try {
+      const directory = await invoke<string>('prepare_schedules_directory');
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const selectedPath = await open({
+        title: 'Load Selah schedule',
+        defaultPath: directory,
+        multiple: false,
+        filters: [{ name: 'Selah Studio Schedule', extensions: ['selah', 'json'] }],
+      });
+      if (typeof selectedPath !== 'string') return;
+      const { readTextFile } = await import('@tauri-apps/plugin-fs');
+      const payload = JSON.parse(await readTextFile(selectedPath));
+      applySchedulePayload(payload);
+    } catch (error) {
+      console.error('Could not load the schedule.', error);
+      setNotice(`Could not load the schedule: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   // Background Selection
@@ -705,7 +749,13 @@ export function Studio() {
   const timelineSlides = useRef<Record<string, Slide[]>>({});
   const restoredCanvas = useRef<Slide[] | null>(null);
   const deckCardsRef = useRef<(HTMLDivElement | null)[]>([]);
-  const [librarySongs, setLibrarySongs] = useState<Song[]>([]);
+  const [librarySongs, setLibrarySongs] = useState<Song[]>(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('selah-active-schedule-songs') || '[]') as Song[];
+      if (Array.isArray(stored)) return [...songs, ...stored.filter((item) => !songs.some((seed) => seed.title === item.title && seed.kind === item.kind))];
+    } catch { /* Start with the built-in library. */ }
+    return [...songs];
+  });
   const [pendingLibrarySong, setPendingLibrarySong] = useState<Song | null>(null);
   const [bookFocused, setBookFocused] = useState(false);
   const [invalidField, setInvalidField] = useState('');
@@ -744,6 +794,13 @@ export function Studio() {
   const outputRef = useRef(output);
   const chapterInput = useRef<HTMLInputElement>(null);
   const verseInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('selah-active-schedule-name', currentScheduleName);
+      localStorage.setItem('selah-active-schedule-songs', JSON.stringify(librarySongs.filter((item) => !songs.some((seed) => seed.title === item.title && seed.kind === item.kind))));
+    } catch { /* Browser storage may be unavailable. */ }
+  }, [currentScheduleName, librarySongs]);
 
   const scriptureQuery = useGetScripture(
     lookupParams ?? { bibleId: DEFAULT_BIBLE_ID, passageId: 'GEN.1.1' },
@@ -816,13 +873,9 @@ export function Studio() {
   // Initialize workspace from local storage & preferences
   useEffect(() => {
     let cancelled = false;
-    Promise.all([readSavedSongs(), readTheme(), readWorkspacePreferences()])
-      .then(([saved, accent, preferences]) => {
+    Promise.all([readTheme(), readWorkspacePreferences()])
+      .then(([accent, preferences]) => {
         if (cancelled) return;
-        setLibrarySongs([
-          ...songs,
-          ...saved.filter((item) => !songs.some((seed) => seed.title === item.title && seed.kind === item.kind)),
-        ]);
         setTheme(accent);
         if (preferences.autoPush !== undefined) setAutoPush(preferences.autoPush);
         if (preferences.scriptureBackground) setScriptureBackground(preferences.scriptureBackground);
@@ -833,7 +886,7 @@ export function Studio() {
         if (preferences.outputName) setOutputName(preferences.outputName);
         setThemeLoaded(true);
         setPreferencesLoaded(true);
-        const savedSong = [...songs, ...saved].find((item) => item.title === restoredCanvas.current?.[0]?.title);
+        const savedSong = librarySongs.find((item) => item.title === restoredCanvas.current?.[0]?.title);
         if (savedSong) {
           setSong(savedSong);
           const generatedSlides = songSlides(savedSong);
@@ -955,9 +1008,9 @@ export function Studio() {
       try {
         const passage = await getScripture(scriptureParams(result.book, String(result.chapter), String(result.verse), selectedTranslation));
         if (requestId !== scriptureRequestId.current) return;
-        const parsed = parseBibleContent(passage.content);
+        const parsed = parseBiblePassage(passage);
         if (!parsed.verses[0]) throw new Error(`No verse was returned for ${passage.reference}.`);
-        title = passage.reference;
+        title = typeof passage.reference === 'string' ? passage.reference : result.reference;
         text = parsed.verses[0];
       } catch (error) {
         if (requestId !== scriptureRequestId.current) return;
@@ -1163,13 +1216,7 @@ export function Studio() {
     if (!deleteTargetSong) return;
     const targetSong = deleteTargetSong;
     setLibrarySongs((prev) => prev.filter((song) => !(song.title === targetSong.title && song.kind === targetSong.kind)));
-    try {
-      const saved = JSON.parse(localStorage.getItem('selah-local-songs') || '[]') as Song[];
-      localStorage.setItem('selah-local-songs', JSON.stringify(saved.filter((song) => !(song.title === targetSong.title && song.kind === targetSong.kind))));
-    } catch {
-      // Dexie remains the canonical storage for saved songs.
-    }
-    void removeLocalSong(targetSong);
+    setIsDirty(true);
     setNotice(`Deleted "${targetSong.title}"`);
     setDeleteTargetSong(null);
   }
@@ -1181,7 +1228,7 @@ export function Studio() {
     setBuilderOpen(true);
   }
 
-  // Live Typo Editing: Updates active slide, deck, global song, and local storage
+  // Live typo editing updates the active schedule's song and deck.
   function saveSlideTypoFix() {
     if (editingSlideIdx === null) return;
     const updatedSlides = [...mediaDeckSlides];
@@ -1201,13 +1248,6 @@ export function Studio() {
         setSong(updatedSong);
         setLibrarySongs((prev) => prev.map((s) => (s.title === updatedSong.title ? updatedSong : s)));
 
-        try {
-          const saved = JSON.parse(localStorage.getItem('selah-local-songs') || '[]') as Song[];
-          const filtered = saved.filter((s) => s.title !== updatedSong.title);
-          localStorage.setItem('selah-local-songs', JSON.stringify([...filtered, updatedSong]));
-        } catch {
-          // Fallback
-        }
       }
 
       if (selectedMediaDeckIdx === editingSlideIdx || selected === editingSlideIdx) {
@@ -1276,7 +1316,7 @@ export function Studio() {
     const bibleId = BIBLE_TRANSLATIONS[selectedTranslation]?.id ?? DEFAULT_BIBLE_ID;
     void getScripture({ bibleId, passageId: `${code}.${c}` }).then((passage) => {
       if (requestId !== sequenceRequestId.current) return;
-      const parsed = parseBibleContent(passage.content);
+      const parsed = parseBiblePassage(passage);
       const numbers = parsed.verseNumbers.length === parsed.verses.length
         ? parsed.verseNumbers
         : parsed.verses.map((_, index) => index + 1);
@@ -1361,7 +1401,7 @@ export function Studio() {
           const end = rest[rest.length - 1];
           return getScripture(scriptureParams(book, chapter, end ? `${start}-${end}` : String(start), translationKey));
         }));
-        const parsedRanges = passages.map((passage) => parseBibleContent(passage.content));
+        const parsedRanges = passages.map(parseBiblePassage);
         verses = parsedRanges.flatMap((parsed) => parsed.verses);
         verseNumbers = parsedRanges.flatMap((parsed, index) => parsed.verseNumbers.length === parsed.verses.length
           ? parsed.verseNumbers
@@ -1718,7 +1758,10 @@ export function Studio() {
               </button>
               {voice.error && (
                 <div className="voice-error-popover" role="alert">
-                  <strong>Push to Talk</strong>
+                  <div className="voice-error-heading">
+                    <strong>Push to Talk</strong>
+                    <button type="button" aria-label="Dismiss voice error" onClick={voice.dismissError}><X size={13} /></button>
+                  </div>
                   <span>{voice.error}</span>
                 </div>
               )}
@@ -1834,12 +1877,7 @@ export function Studio() {
               >
                 <Plus size={12} /> New Schedule
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs gap-1 bg-white/5 border-white/10 hover:bg-white/10"
-                onClick={() => fileInputRef.current?.click()}
-              >
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 bg-white/5 border-white/10 hover:bg-white/10" onClick={() => void chooseScheduleFile()}>
                 <Upload size={12} /> Load Schedule
               </Button>
               <Button
@@ -2850,18 +2888,14 @@ export function Studio() {
               setNotice(`${item.kind === 'sermon' ? 'Sermon' : 'Song'} staged in preview`);
             }}
             onSave={(item) => {
-              setSavedState('saving');
-              void saveLocalSong(item)
-                .then(() => {
-                  setLibrarySongs((items) => [
-                    ...items.filter((ex) => ex.title !== item.title || ex.kind !== item.kind),
-                    item,
-                  ]);
-                  setBuilderOpen(false);
-                  setSavedState('saved');
-                  setNotice(`${item.kind === 'sermon' ? 'Sermon' : 'Song'} saved to local device. The current display was left unchanged.`);
-                })
-                .catch(() => setSavedState('error'));
+              setLibrarySongs((items) => [
+                ...items.filter((existing) => existing.title !== item.title || existing.kind !== item.kind),
+                item,
+              ]);
+              setIsDirty(true);
+              setBuilderOpen(false);
+              setSavedState('saved');
+              setNotice(`${item.kind === 'sermon' ? 'Sermon' : 'Song'} saved in "${currentScheduleName}". Save the schedule to write it to disk.`);
             }}
           />
         )}

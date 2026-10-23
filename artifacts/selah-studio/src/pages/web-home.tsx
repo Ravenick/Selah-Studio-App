@@ -104,7 +104,7 @@ export default function WebHome() {
               <span>for the moment.</span>
             </h1>
             <p className="landing-lede landing-reveal">
-              Scripture, songs, sermons, and the stillness between them—held in one thoughtful space for worship teams.
+              Scripture, songs, sermons, and the stillness between them / held in one thoughtful space for worship teams.
             </p>
             <div className="landing-hero-actions landing-reveal">
               <Link className="landing-btn-primary" href="/studio">

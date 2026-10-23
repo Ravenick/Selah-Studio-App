@@ -8,7 +8,7 @@ type Recognition = {
   interimResults: boolean;
   lang: string;
   onresult: ((event: SpeechRecognitionResult) => void) | null;
-  onerror: (() => void) | null;
+  onerror: ((event?: { error?: string }) => void) | null;
   onend: (() => void) | null;
   start: () => void;
   stop: () => void;
@@ -50,10 +50,10 @@ export function usePushToTalk(onTranscript: (text: string) => void) {
             onTranscript(transcript);
           }
         };
-        instance.onerror = () => {
+        instance.onerror = (event) => {
           // If already captured text, keep it; otherwise show error
           if (!latestTranscript.current) {
-            setError('Speech recognition could not hear that. Try again.');
+            setError(event?.error ? `Speech recognition error: ${event.error}. Check microphone permission and try again.` : 'Speech recognition could not hear that. Try again.');
           }
         };
         instance.onend = () => {
@@ -89,7 +89,10 @@ export function usePushToTalk(onTranscript: (text: string) => void) {
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach((track) => track.stop());
         const audio = new Blob(chunks.current, { type: mediaRecorder.mimeType || 'audio/webm' });
-        if (!audio.size) return;
+        if (!audio.size) {
+          setError('No audio was captured. Check that the microphone is enabled, then press and hold Push to Talk while speaking.');
+          return;
+        }
         setTranscribing(true);
         try {
           const result = await mutation.mutateAsync({ data: audio });
@@ -142,5 +145,7 @@ export function usePushToTalk(onTranscript: (text: string) => void) {
     }
   }, []);
 
-  return { listening, transcribing, error, start, stop };
+  const dismissError = useCallback(() => setError(''), []);
+
+  return { listening, transcribing, error, start, stop, dismissError };
 }

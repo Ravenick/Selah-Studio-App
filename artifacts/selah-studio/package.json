@@ -84,5 +84,8 @@
     "wouter": "^3.3.5",
     "zod": "catalog:",
     "zustand": "^5.0.15"
+  },
+  "dependencies": {
+    "@tauri-apps/plugin-dialog": "^2.8.3"
   }
 }
