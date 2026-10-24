@@ -39,7 +39,7 @@ const features = [
   },
 ];
 
-const windowsDownloadUrl = 'https://github.com/Ravenick/Selah-Studio-App/releases/latest';
+const windowsDownloadUrl = 'https://github.com/Ravenick/Artifacts/releases/download/v0.1.0/Selah.Studio';
 
 export default function WebHome() {
   const stageRef = useRef<HTMLDivElement>(null);
