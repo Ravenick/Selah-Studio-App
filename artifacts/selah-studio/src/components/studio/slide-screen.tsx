@@ -1,5 +1,5 @@
 import React from 'react';
-import { cloneElement, isValidElement, useEffect, useState, type ReactNode, type ReactElement } from 'react';
+import { cloneElement, isValidElement, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type ReactElement } from 'react';
 import { getBackgroundBlob } from '@/lib/local-workspace';
 import type { Slide } from '@/lib/studio-data';
 import { FormattedText } from './formatted-text';
@@ -193,6 +193,10 @@ export function SlideScreen({
   const [resolvedBackground, setResolvedBackground] = useState('');
 
   const [resolvedMedia, setResolvedMedia] = useState('');
+  const [mediaError, setMediaError] = useState('');
+  const screenRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLParagraphElement>(null);
+  const [fittedFontSize, setFittedFontSize] = useState<number | null>(null);
   const scriptureAppearance = useScriptureAppearance();
   const audioMuted = slide.audioMuted ?? true;
   const headerColors: Record<string, string> = { white: 'var(--screen-text)', teal: 'var(--primary)', gold: 'var(--gold)', rose: '#fb7185' };
@@ -230,15 +234,21 @@ export function SlideScreen({
     const source = slide.mediaUrl;
     if (!isLocalAsset(source)) {
       setResolvedMedia(source || '');
+      setMediaError('');
       return;
     }
     setResolvedMedia('');
+    setMediaError('');
     void getBackgroundBlob(source!.slice('local-background:'.length)).then((blob) => {
       if (alive && blob) {
         objectUrl = URL.createObjectURL(blob);
         setResolvedMedia(objectUrl);
+      } else if (alive) {
+        setMediaError('This local media file could not be opened.');
       }
-    }).catch(() => undefined);
+    }).catch(() => {
+      if (alive) setMediaError('This local media file could not be opened.');
+    });
     return () => {
       alive = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
@@ -258,8 +268,52 @@ export function SlideScreen({
   const isStandaloneMedia = slide.kind === 'media' && Boolean(slide.mediaUrl);
   const youtubeEmbed = slide.mediaType === 'youtube' && resolvedMedia ? youtubeUrlForEmbed(resolvedMedia) : '';
 
+  // Keep long lyrics and passages inside the output-safe area. This is measured
+  // from the real slide size, so it works equally on the small operator monitor
+  // and a full-screen projector without clipping a line at the bottom.
+  useLayoutEffect(() => {
+    if (isStandaloneMedia || mode !== 'normal') return;
+    const screen = screenRef.current;
+    const text = textRef.current;
+    if (!screen || !text) return;
+
+    let frame = 0;
+    const fit = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const width = screen.clientWidth;
+        const height = screen.clientHeight;
+        if (!width || !height) return;
+        // Use one fitting rule for scripture, song, and sermon. A binary search
+        // measures after wrapping, so every line stays inside a deliberately
+        // conservative safe area on both the operator and projector canvases.
+        const base = width * (slide.kind === 'scripture' ? 0.064 : 0.052);
+        const maxTextHeight = Math.max(1, height * (slide.heading ? 0.46 : 0.54));
+        let low = 6;
+        let high = base;
+        for (let pass = 0; pass < 14; pass += 1) {
+          const candidate = (low + high) / 2;
+          text.style.fontSize = `${candidate}px`;
+          const fits = text.scrollHeight <= maxTextHeight && text.scrollWidth <= text.clientWidth + 1;
+          if (fits) low = candidate;
+          else high = candidate;
+        }
+        const nextSize = Math.max(6, Math.floor(low * 10) / 10);
+        text.style.fontSize = `${nextSize}px`;
+        setFittedFontSize((current) => current === nextSize ? current : nextSize);
+      });
+    };
+    fit();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fit);
+    observer?.observe(screen);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
+  }, [isStandaloneMedia, mode, slide.id, slide.kind, slide.text, slide.verses, slide.heading]);
+
   return (
-    <div className={`slide-screen ${slide.kind === 'scripture' ? 'scripture-screen' : ''} ${slide.kind === 'song' || slide.kind === 'sermon' ? 'song-screen' : ''} ${slide.verses ? 'compiled-scripture' : ''} ${slide.chorus ? 'chorus-screen' : ''} ${mode === 'blackout' ? 'screen-blackout' : ''} ${isStandaloneMedia ? 'standalone-media-screen' : ''} ${className}`} style={{ '--scripture-font': headerFonts[scriptureAppearance.font] ?? 'ui-monospace, monospace', '--scripture-text-color': scriptureAppearance.textColor } as React.CSSProperties}>
+    <div ref={screenRef} className={`slide-screen ${slide.kind === 'scripture' ? 'scripture-screen' : ''} ${slide.kind === 'song' || slide.kind === 'sermon' ? 'song-screen' : ''} ${slide.verses ? 'compiled-scripture' : ''} ${slide.chorus ? 'chorus-screen' : ''} ${mode === 'blackout' ? 'screen-blackout' : ''} ${isStandaloneMedia ? 'standalone-media-screen' : ''} ${className}`} style={{ '--scripture-font': headerFonts[scriptureAppearance.font] ?? 'ui-monospace, monospace', '--scripture-text-color': scriptureAppearance.textColor } as React.CSSProperties}>
       <style>{transitionStyles}</style>
       {mode !== 'blackout' && isStandaloneMedia && (
         <div className="standalone-media-stage">
@@ -276,9 +330,9 @@ export function SlideScreen({
               />
             ) : <div className="standalone-media-error">Loading YouTube video…</div>
           ) : slide.mediaType === 'video' ? (
-            resolvedMedia ? <video src={resolvedMedia} className="standalone-media-content" autoPlay loop playsInline controls muted={audioMuted} /> : <div className="standalone-media-error">Loading video…</div>
+            resolvedMedia ? <video src={resolvedMedia} className="standalone-media-content" autoPlay loop playsInline controls muted={audioMuted} onError={() => setMediaError('This video could not be played on the projector.')} /> : <div className="standalone-media-error">{mediaError || 'Loading video…'}</div>
           ) : (
-            resolvedMedia ? <img src={resolvedMedia} className="standalone-media-content" alt={slide.title || 'Presentation media'} /> : <div className="standalone-media-error">Loading image…</div>
+            resolvedMedia ? <img src={resolvedMedia} className="standalone-media-content" alt={slide.title || 'Presentation media'} onError={() => setMediaError('This image could not be displayed on the projector.')} /> : <div className="standalone-media-error">{mediaError || 'Loading image…'}</div>
           )}
         </div>
       )}
@@ -312,7 +366,7 @@ export function SlideScreen({
             </strong>
           )}
 
-          <p>
+          <p ref={textRef} style={fittedFontSize ? { fontSize: `${fittedFontSize}px` } : undefined}>
             {slide.verses ? (
               slide.verses.map((verse, i) => (
                 <span className="scripture-verse" key={i}>

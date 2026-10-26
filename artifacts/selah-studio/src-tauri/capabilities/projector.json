@@ -7,6 +7,15 @@
     "core:window:default",
     "core:window:allow-show",
     "core:window:allow-set-focus",
-    "core:window:allow-set-fullscreen-on-monitor"
+    "core:window:allow-set-fullscreen-on-monitor",
+    "fs:allow-read-file",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        {
+          "path": "$DOCUMENT/SelahStudio/Assets/**"
+        }
+      ]
+    }
   ]
 }

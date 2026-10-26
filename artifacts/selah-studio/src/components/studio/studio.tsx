@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import {
   chapters,
   initialTimeline,
@@ -749,6 +749,7 @@ export function Studio() {
   const timelineSlides = useRef<Record<string, Slide[]>>({});
   const restoredCanvas = useRef<Slide[] | null>(null);
   const deckCardsRef = useRef<(HTMLDivElement | null)[]>([]);
+  const deckPaneRef = useRef<HTMLDivElement>(null);
   const [librarySongs, setLibrarySongs] = useState<Song[]>(() => {
     try {
       const stored = JSON.parse(localStorage.getItem('selah-active-schedule-songs') || '[]') as Song[];
@@ -794,6 +795,45 @@ export function Studio() {
   const outputRef = useRef(output);
   const chapterInput = useRef<HTMLInputElement>(null);
   const verseInput = useRef<HTMLInputElement>(null);
+
+  function resetWorkspaceLayout() {
+    deckPaneRef.current?.style.removeProperty('height');
+    setNotice('Workspace layout reset.');
+  }
+
+  function startDeckResize(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    const pane = deckPaneRef.current;
+    if (!pane) return;
+    const startY = event.clientY;
+    const startHeight = pane.getBoundingClientRect().height;
+    const minHeight = 148;
+    const maxHeight = Math.floor(window.innerHeight * 0.76);
+    const move = (moveEvent: PointerEvent) => {
+      pane.style.height = `${Math.max(minHeight, Math.min(maxHeight, startHeight + moveEvent.clientY - startY))}px`;
+    };
+    const stop = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', stop);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop, { once: true });
+  }
+
+  function revealSelectedVerses(numbers: number[]) {
+    const first = [...numbers].sort((a, b) => a - b)[0];
+    if (!first) return;
+    window.requestAnimationFrame(() => {
+      document.getElementById(`sequence-verse-${first}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
+
+  useEffect(() => {
+    // Sequence loading is asynchronous; reveal again once the new chapter's
+    // rows exist, not only while the user is still typing in the field.
+    if (highlightedVerses.length && sequenceVerses.length) revealSelectedVerses(highlightedVerses);
+  }, [sequenceVerses, highlightedVerses]);
 
   useEffect(() => {
     try {
@@ -1464,6 +1504,7 @@ export function Studio() {
     const targetNumbers = indexes.map((index) => index + 1);
     setHighlightedVerses(targetNumbers);
     loadSequence(book, chapter, targetNumbers);
+    revealSelectedVerses(targetNumbers);
 
     setTimeout(() => {
       displayHighlightedVerses(takeLiveNow);
@@ -1872,7 +1913,7 @@ export function Studio() {
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 text-xs gap-1 bg-white/5 border-white/10 hover:bg-white/10"
+                className="accent-action h-7 text-xs gap-1"
                 onClick={() => { setNewScheduleName(''); setNewScheduleError(''); setNewScheduleOpen(true); }}
               >
                 <Plus size={12} /> New Schedule
@@ -1882,9 +1923,9 @@ export function Studio() {
               </Button>
               <Button
                 size="sm"
-                className={`h-7 text-xs font-bold gap-1 transition-all ${isDirty
-                  ? 'bg-primary text-black opacity-100 shadow-[0_0_10px_rgba(0,242,254,0.4)]'
-                  : 'bg-white/10 text-slate-300 opacity-50'
+                className={`accent-action h-7 text-xs font-bold gap-1 transition-all ${isDirty
+                  ? 'opacity-100'
+                  : 'opacity-50'
                   }`}
                 onClick={handleSaveSchedule}
               >
@@ -1896,7 +1937,7 @@ export function Studio() {
           <div className="flex items-center gap-1 bg-black/40 p-1 rounded-lg border border-white/10">
             <button
               type="button"
-              className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${transitionMode === 'cold' ? 'bg-primary text-black' : 'text-slate-400 hover:text-white'
+              className={`transition-choice px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${transitionMode === 'cold' ? 'active' : ''
                 }`}
               onClick={() => setTransitionMode('cold')}
             >
@@ -1904,7 +1945,7 @@ export function Studio() {
             </button>
             <button
               type="button"
-              className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${transitionMode === 'fade' ? 'bg-primary text-black' : 'text-slate-400 hover:text-white'
+              className={`transition-choice px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${transitionMode === 'fade' ? 'active' : ''
                 }`}
               onClick={() => setTransitionMode('fade')}
             >
@@ -1994,7 +2035,7 @@ export function Studio() {
                   <div className="subsection-title">
                     <span>YOUR SONGS</span>
                     <Button
-                      className="new-song-button"
+                      className="new-song-button accent-action"
                       size="sm"
                       onClick={() => {
                         setBuilderMode('song');
@@ -2010,6 +2051,7 @@ export function Studio() {
                     <Button
                       variant="outline"
                       size="sm"
+                      className="accent-action"
                       onClick={() => {
                         setBuilderMode('sermon');
                         setBuilderSong(undefined);
@@ -2301,13 +2343,25 @@ export function Studio() {
                         const maxV = getMaxVerses(book, chapter || '1');
                         const inlineIndices = parseVerseRange(val, maxV);
                         if (inlineIndices) {
-                          setHighlightedVerses(inlineIndices.map(i => i + 1));
+                          const numbers = inlineIndices.map(i => i + 1);
+                          setHighlightedVerses(numbers);
+                          revealSelectedVerses(numbers);
+                        } else {
+                          shakeField('verse');
                         }
                       }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
-                          if (highlightedVerses.length > 0) {
+                          const indexes = parseVerseRange(verse, getMaxVerses(book, chapter || '1'));
+                          if (!indexes) {
+                            shakeField('verse');
+                            return;
+                          }
+                          const numbers = indexes.map((index) => index + 1);
+                          setHighlightedVerses(numbers);
+                          revealSelectedVerses(numbers);
+                          if (numbers.length > 0) {
                             displayHighlightedVerses(autoPush);
                           } else if (slides[selected]) {
                             broadcast(slides[selected]!);
@@ -2352,7 +2406,7 @@ export function Studio() {
                         </Button>
                         <Button
                           size="sm"
-                          className="h-6 text-[10px] px-2.5 bg-primary text-black font-semibold"
+                          className="accent-action h-6 text-[10px] px-2.5 font-semibold"
                           disabled={!highlightedVerses.length}
                           onClick={() => { setActiveFocus('preview'); displayHighlightedVerses(autoPush); }}
                         >
@@ -2372,6 +2426,7 @@ export function Studio() {
                           return (
                             <button
                               key={item.verseNumber}
+                              id={`sequence-verse-${item.verseNumber}`}
                               type="button"
                               className={`sequence-verse-row ${isHighlighted ? 'highlighted' : ''}`}
                               aria-pressed={isHighlighted}
@@ -2443,7 +2498,7 @@ export function Studio() {
               {tab === 'Schedules' && (
                 <div className="flex flex-col gap-2">
                   <Button
-                    className="w-full h-9 justify-center gap-2 font-semibold"
+                    className="accent-action w-full h-9 justify-center gap-2 font-semibold"
                     onClick={() => { setNewScheduleName(''); setNewScheduleError(''); setNewScheduleOpen(true); }}
                   >
                     <Plus size={14} /> New Schedule
@@ -2477,10 +2532,11 @@ export function Studio() {
 
             {/* 🎵 HORIZONTAL SCROLLABLE PRESENTATION DECK WITH EXCLUSIVE FOCUS */}
             <div
+              ref={deckPaneRef}
               tabIndex={0}
               onClick={() => setActiveFocus('deck')}
               onFocus={() => setActiveFocus('deck')}
-              className={`media-presentation-timeline-pane bg-neutral-900/90 border rounded-xl p-2 flex flex-col gap-2 w-full h-[20vh] shrink-0 shadow-lg transition-all outline-none ${activeFocus === 'deck' ? 'border-primary ring-1 ring-primary/40 shadow-[0_0_12px_rgba(0,242,254,0.15)]' : 'border-white/10'
+              className={`media-presentation-timeline-pane bg-neutral-900/90 border rounded-xl p-2 flex flex-col gap-2 w-full shrink-0 shadow-lg transition-all outline-none ${activeFocus === 'deck' ? 'border-primary ring-1 ring-primary/40 shadow-[0_0_12px_rgba(0,242,254,0.15)]' : 'border-white/10'
                 }`}
             >
               <div className="flex items-center justify-between">
@@ -2524,6 +2580,15 @@ export function Studio() {
                   >
                     Next <ChevronRight size={12} className="ml-0.5" />
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="deck-reset-button h-6 text-[10px] px-2"
+                    onClick={(e) => { e.stopPropagation(); resetWorkspaceLayout(); }}
+                    title="Restore the default deck and monitor layout"
+                  >
+                    <RotateCcw size={11} className="mr-1" /> Reset layout
+                  </Button>
                 </div>
               </div>
 
@@ -2547,7 +2612,7 @@ export function Studio() {
                         if (autoPush) broadcast(slideItem);
                       }}
                       className={`flex-none w-44 aspect-video rounded-md p-2 border cursor-pointer flex flex-col justify-between transition-all relative group ${isCurrentActive
-                        ? 'bg-cyan-300/20 border-cyan-200 ring-2 ring-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.38)] text-white'
+                        ? 'deck-card-active text-white'
                         : 'bg-white/5 border-white/10 hover:bg-white/10 text-slate-300'
                         }`}
                     >
@@ -2581,6 +2646,15 @@ export function Studio() {
                     </div>
                   );
                 })}
+              </div>
+              <div
+                className="deck-resize-handle"
+                role="separator"
+                aria-label="Resize presentation deck"
+                aria-orientation="horizontal"
+                onPointerDown={startDeckResize}
+              >
+                <span />
               </div>
             </div>
 

@@ -4,9 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { parseSections, sectionHeadings, type SongSection } from '@/lib/studio-workflows';
-import type { HeaderStyle, Song } from '@/lib/studio-data';
+import type { HeaderStyle, Slide, Song } from '@/lib/studio-data';
 import { SelectionEditor } from './selection-editor';
-import { FormattedText } from './formatted-text';
+import { SlideScreen } from './slide-screen';
 import { PRESENTATION_COLORS, type PresentationFont } from '@/lib/scripture-appearance';
 import type { TextFormat } from '@/lib/presentation';
 
@@ -137,7 +137,25 @@ export function SongBuilder({ onClose, onApply, onSave, mode = 'song', initialSo
       </div>
       <div className="builder-preview-pane">
         <div className="builder-label">STYLE PREVIEW <span>{headings[active] ?? (sermon ? 'Sermon slide' : 'Verse')}</span></div>
-        <div id="song-section-panel" role="tabpanel" aria-labelledby={`song-section-${active}`} className={`builder-slide-preview style-preview-screen ${current?.chorus ? 'is-chorus' : ''}`}><video src={background} muted autoPlay loop playsInline/><div>{!sermon && headerStyle.showMarker !== false && <strong style={{ color: headerStyle.color, fontFamily: headerStyle.font === 'font-bebas-neue' ? 'Bebas Neue, sans-serif' : headerStyle.font === 'font-montserrat' ? 'Montserrat, sans-serif' : headerStyle.font === 'font-mono' ? 'ui-monospace, monospace' : headerStyle.font === 'font-georgia' ? 'Georgia, serif' : 'inherit', fontSize: `${Math.max(10, 15 * headerStyle.size / 100)}px`, fontWeight: Number(headerStyle.weight) }}>{headings[active]}</strong>}<p style={{ fontSize: `${Math.max(8, Math.min(19, 19 * Math.sqrt(350 / Math.max(350, current?.text.length ?? 0))))}px` }}><FormattedText text={current?.text ?? ''} formats={current?.formats}/></p></div></div>
+        <div id="song-section-panel" role="tabpanel" aria-labelledby={`song-section-${active}`} className="builder-slide-preview style-preview-screen">
+          <SlideScreen
+            className="builder-slide-screen"
+            backgroundDim={55}
+            slide={{
+              id: `builder-preview-${active}`,
+              title: title || (sermon ? 'Untitled sermon' : 'Untitled song'),
+              label: headings[active] ?? 'Slide',
+              text: current?.text ?? '',
+              kind: sermon ? 'sermon' : 'song',
+              background,
+              backgroundType: 'video',
+              heading: !sermon && headerStyle.showMarker !== false ? headings[active] : undefined,
+              headingStyle: headerStyle,
+              chorus: current?.chorus,
+              formats: current?.formats,
+            } satisfies Slide}
+          />
+        </div>
       </div>
       <div className="builder-arrange"><div className="builder-label">{sermon ? 'SERMON SLIDES' : 'SONG ARRANGEMENT'} <span>{sermon ? `${sections.length} slides` : `${sections.filter(section => !section.chorus).length} verses · ${sections.filter(section => section.chorus).length} choruses`}</span></div>
         {sections.length ? <><div className="verse-tabs" role="tablist" aria-label="Song sections">{sections.map((section, index) => <div key={index} draggable onDragStart={() => setDraggingSection(index)} onDragOver={event => event.preventDefault()} onDrop={() => { if (draggingSection !== null) moveSection(draggingSection, index); setDraggingSection(null); }} onDragEnd={() => setDraggingSection(null)} className={`builder-section ${active === index ? 'selected' : ''} ${section.chorus ? 'is-chorus' : ''} ${draggingSection === index ? 'is-dragging' : ''}`}><Button variant="ghost" role="tab" aria-selected={active === index} aria-controls="song-section-panel" id={`song-section-${index}`} className="builder-section-tab" onClick={() => { setActive(index); setTextSelection(null); }}>{!sermon && <span>{headings[index]}</span>}<small>{section.text.split('\n')[0]}</small></Button>{!sermon && <label className="chorus-toggle"><span>Designate as Chorus</span><Switch aria-label={`Designate section ${index + 1} as Chorus`} checked={section.chorus} onCheckedChange={checked => { setSections(items => items.map((item, i) => i === index ? { ...item, chorus: checked } : item)); setApplied(false); }}/></label>}</div>)}</div>

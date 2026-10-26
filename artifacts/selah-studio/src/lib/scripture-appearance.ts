@@ -9,7 +9,7 @@ export type ScriptureAppearance = {
 };
 
 export const DEFAULT_SCRIPTURE_APPEARANCE: ScriptureAppearance = {
-  font: 'font-mono',
+  font: 'font-georgia',
   textColor: '#ffffff',
 };
 
