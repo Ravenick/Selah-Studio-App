@@ -22,7 +22,7 @@ export function useFitText({
   contentKey,
   enabled = true,
   minFont = 12,
-  maxFont = 120,
+  maxFont = 16.9,
 }: FitTextOptions) {
   const [fontSize, setFontSize] = useState(maxFont);
 

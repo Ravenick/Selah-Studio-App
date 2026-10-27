@@ -6902,7 +6902,7 @@ h1 {
   overflow: hidden;
 }
 
-.slide-screen .slide-text-boundary > p {
+.slide-screen .slide-text-boundary>p {
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -6923,7 +6923,7 @@ h1 {
   bottom: 18%;
 }
 
-.scripture-screen .slide-text-boundary > p {
+.scripture-screen .slide-text-boundary>p {
   color: var(--scripture-text-color, #fff);
   font-family: var(--scripture-font, 'Montserrat', sans-serif) !important;
   font-weight: 800 !important;
@@ -6948,7 +6948,7 @@ h1 {
   box-shadow: 0 0 12px color-mix(in oklab, var(--primary) 48%, transparent);
 }
 
-.accent-live-toggle[data-state='checked'] > span {
+.accent-live-toggle[data-state='checked']>span {
   background: var(--primary-foreground) !important;
 }
 
@@ -7373,4 +7373,35 @@ h1 {
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
   }
+}
+
+/* The editor preview uses the exact 16:9 geometry of the operator/projector
+   renderer, not the previous taller approximation. */
+.song-builder .builder-preview-pane .builder-slide-preview {
+  aspect-ratio: 16 / 9 !important;
+  min-height: 0 !important;
+}
+
+.song-builder .builder-slide-preview>.builder-slide-screen {
+  width: 100%;
+  height: 100%;
+}
+
+/* Keep the section marker below the upper edge and within a fixed safe box. */
+.song-screen .song-slide-heading {
+  position: absolute;
+  top: 10%;
+  right: 12%;
+  left: 12%;
+  z-index: 2;
+  max-height: 12%;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.05;
+}
+
+.song-screen .slide-text-boundary {
+  top: 22%;
 }

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, Music2, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -12,6 +12,20 @@ import type { TextFormat } from '@/lib/presentation';
 
 const defaultHeaderStyle: HeaderStyle = { weight: '700', size: 100, color: '#ffffff', font: 'font-montserrat', showMarker: true };
 const defaultSongBackground = '/backgrounds/motion/Blue Particles.mp4';
+const MAX_LINES_PER_SLIDE = 9;
+
+function limitSectionsToNineLines(sections: SongSection[]) {
+  return sections.flatMap((section) => {
+    const lines = section.text.split('\n');
+    if (lines.length <= MAX_LINES_PER_SLIDE) return [section];
+    return Array.from({ length: Math.ceil(lines.length / MAX_LINES_PER_SLIDE) }, (_, index) => ({
+      ...section,
+      text: lines.slice(index * MAX_LINES_PER_SLIDE, (index + 1) * MAX_LINES_PER_SLIDE).join('\n'),
+      formats: index === 0 ? section.formats : [],
+      chorus: index === 0 ? section.chorus : false,
+    }));
+  });
+}
 
 function rebaseFormatsAfterEdit(formats: TextFormat[], previousText: string, nextText: string): TextFormat[] {
   let prefix = 0;
@@ -39,14 +53,14 @@ export function SongBuilder({ onClose, onApply, onSave, mode = 'song', initialSo
   const titleInput = useRef<HTMLInputElement>(null);
   const [titleNeedsAttention, setTitleNeedsAttention] = useState(false);
   const [lyrics, setLyrics] = useState(initialSong?.sermonText ?? initialSong?.lyrics.join('\n\n') ?? '');
-  const [sections, setSections] = useState<SongSection[]>(initialSong?.sections ?? parseSections(initialSong?.sermonText ?? initialSong?.lyrics.join('\n\n') ?? ''));
+  const [sections, setSections] = useState<SongSection[]>(() => limitSectionsToNineLines(initialSong?.sections ?? parseSections(initialSong?.sermonText ?? initialSong?.lyrics.join('\n\n') ?? '')));
   const [draggingSection, setDraggingSection] = useState<number | null>(null);
   const [headerStyle, setHeaderStyle] = useState<HeaderStyle>(initialSong?.headerStyle ?? defaultHeaderStyle);
   const [textSelection, setTextSelection] = useState<{ start: number; end: number } | null>(null);
   const baseline = useRef({
     title: initialSong?.title ?? '',
     lyrics: initialSong?.sermonText ?? initialSong?.lyrics.join('\n\n') ?? '',
-    sections: JSON.stringify(initialSong?.sections ?? parseSections(initialSong?.sermonText ?? initialSong?.lyrics.join('\n\n') ?? '')),
+    sections: JSON.stringify(limitSectionsToNineLines(initialSong?.sections ?? parseSections(initialSong?.sermonText ?? initialSong?.lyrics.join('\n\n') ?? ''))),
     headerStyle: JSON.stringify(initialSong?.headerStyle ?? defaultHeaderStyle),
   });
   const [active, setActive] = useState(0);
@@ -55,6 +69,13 @@ export function SongBuilder({ onClose, onApply, onSave, mode = 'song', initialSo
   const backgroundType: 'image' | 'video' = 'video';
   const [error, setError] = useState('');
   const [applied, setApplied] = useState(false);
+  useEffect(() => {
+    const capped = limitSectionsToNineLines(sections);
+    if (capped.length === sections.length && capped.every((section, index) => section.text === sections[index]?.text)) return;
+    setSections(capped);
+    setLyrics(capped.map((section) => section.text).join('\n\n'));
+    setActive((index) => Math.min(index, Math.max(0, capped.length - 1)));
+  }, [sections]);
   const dirty = title !== baseline.current.title
     || lyrics !== baseline.current.lyrics
     || JSON.stringify(sections) !== baseline.current.sections
@@ -159,7 +180,7 @@ export function SongBuilder({ onClose, onApply, onSave, mode = 'song', initialSo
       </div>
       <div className="builder-arrange"><div className="builder-label">{sermon ? 'SERMON SLIDES' : 'SONG ARRANGEMENT'} <span>{sermon ? `${sections.length} slides` : `${sections.filter(section => !section.chorus).length} verses · ${sections.filter(section => section.chorus).length} choruses`}</span></div>
         {sections.length ? <><div className="verse-tabs" role="tablist" aria-label="Song sections">{sections.map((section, index) => <div key={index} draggable onDragStart={() => setDraggingSection(index)} onDragOver={event => event.preventDefault()} onDrop={() => { if (draggingSection !== null) moveSection(draggingSection, index); setDraggingSection(null); }} onDragEnd={() => setDraggingSection(null)} className={`builder-section ${active === index ? 'selected' : ''} ${section.chorus ? 'is-chorus' : ''} ${draggingSection === index ? 'is-dragging' : ''}`}><Button variant="ghost" role="tab" aria-selected={active === index} aria-controls="song-section-panel" id={`song-section-${index}`} className="builder-section-tab" onClick={() => { setActive(index); setTextSelection(null); }}>{!sermon && <span>{headings[index]}</span>}<small>{section.text.split('\n')[0]}</small></Button>{!sermon && <label className="chorus-toggle"><span>Designate as Chorus</span><Switch aria-label={`Designate section ${index + 1} as Chorus`} checked={section.chorus} onCheckedChange={checked => { setSections(items => items.map((item, i) => i === index ? { ...item, chorus: checked } : item)); setApplied(false); }}/></label>}</div>)}</div>
-        <SelectionEditor key={active} text={current?.text ?? ''} formats={current?.formats ?? []} defaultFont="font-montserrat" showTabs={false} onSelectionChange={setTextSelection} onChange={text => {const previousText = current?.text ?? ''; const next = sections.map((item,i) => i === active ? {...item,text,formats:rebaseFormatsAfterEdit(item.formats ?? [], previousText, text)} : item);setSections(next);setLyrics(next.map(item => item.text).join('\n\n'));setTextSelection(null);setApplied(false);}} onFormat={format => {setSections(items => items.map((item,i) => i === active ? {...item,formats:[...(item.formats ?? []),format]} : item));setApplied(false);}}/>
+        <SelectionEditor key={active} text={current?.text ?? ''} formats={current?.formats ?? []} defaultFont="font-montserrat" maxLines={MAX_LINES_PER_SLIDE} showTabs={false} onSelectionChange={setTextSelection} onChange={text => {const previousText = current?.text ?? ''; const next = sections.map((item,i) => i === active ? {...item,text,formats:rebaseFormatsAfterEdit(item.formats ?? [], previousText, text)} : item);setSections(next);setLyrics(next.map(item => item.text).join('\n\n'));setTextSelection(null);setApplied(false);}} onFormat={format => {setSections(items => items.map((item,i) => i === active ? {...item,formats:[...(item.formats ?? []),format]} : item));setApplied(false);}}/>
 </> : <div className="builder-empty"><Music2 size={32}/><span>Your next song starts here.</span></div>}
       </div>
     </div>

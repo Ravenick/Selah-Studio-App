@@ -274,7 +274,8 @@ export function SlideScreen({
     enabled: !isStandaloneMedia && mode === 'normal',
     contentKey: `${slide.id}|${slide.kind}|${scriptureAppearance.font}|${slide.heading ?? ''}|${slide.text}|${JSON.stringify(slide.formats ?? [])}|${JSON.stringify(slide.verses ?? [])}`,
     minFont: 12,
-    maxFont: 120,
+    // Keep the operator's default live text at the requested readable baseline.
+    maxFont: 16.9,
   });
 
   return (
