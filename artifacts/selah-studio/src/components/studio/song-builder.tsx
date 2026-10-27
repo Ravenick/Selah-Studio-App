@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Check, GripVertical, Music2, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -33,7 +33,7 @@ function rebaseFormatsAfterEdit(formats: TextFormat[], previousText: string, nex
   }).filter((format) => format.start >= 0 && format.start < format.end && format.start < nextText.length);
 }
 
-export function SongBuilder({ onClose, onApply, onSave, mode = 'song', initialSong }: { mode?: 'song' | 'sermon'; initialSong?: Song | undefined; onClose: () => void; onApply: (song: Song) => void; onSave: (song: Song) => void }) {
+export function SongBuilder({ onClose, onApply, onSave, mode = 'song', initialSong }: { mode?: 'song' | 'sermon'; initialSong?: Song | undefined; onClose: () => void; onApply: (song: Song) => void | Promise<void>; onSave: (song: Song) => void | Promise<void> }) {
   const sermon = mode === 'sermon';
   const [title, setTitle] = useState(initialSong?.title ?? '');
   const titleInput = useRef<HTMLInputElement>(null);
@@ -43,62 +43,120 @@ export function SongBuilder({ onClose, onApply, onSave, mode = 'song', initialSo
   const [draggingSection, setDraggingSection] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const verseTabsRef = useRef<HTMLDivElement>(null);
-  const scrollVelocityRef = useRef<number>(0);
-  const scrollRafRef = useRef<number | null>(null);
+  const dragPointerRef = useRef<{
+    pointerId: number;
+    from: number;
+    destination: number;
+    clientX: number;
+    clientY: number;
+    lastFrame: number;
+    frame: number;
+  } | null>(null);
 
-  const stopAutoScroll = () => {
-    scrollVelocityRef.current = 0;
-    if (scrollRafRef.current !== null) {
-      cancelAnimationFrame(scrollRafRef.current);
-      scrollRafRef.current = null;
-    }
-  };
-
-  const startAutoScroll = () => {
-    if (scrollRafRef.current !== null) return;
-    const scrollLoop = () => {
-      if (scrollVelocityRef.current !== 0 && verseTabsRef.current) {
-        verseTabsRef.current.scrollTop += scrollVelocityRef.current;
-        scrollRafRef.current = requestAnimationFrame(scrollLoop);
-      } else {
-        scrollRafRef.current = null;
-      }
-    };
-    scrollRafRef.current = requestAnimationFrame(scrollLoop);
-  };
-
-  const handleContainerDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
+  function getSectionDropIndex(clientX: number, clientY: number, from: number) {
     const container = verseTabsRef.current;
-    if (!container) return;
+    if (!container || !sections.length) return from;
+    const cards = [...container.querySelectorAll<HTMLElement>('[data-section-index]')];
+    if (!cards.length) return from;
+
+    const target = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-section-index]');
+    if (!target || !container.contains(target)) {
+      if (clientY <= cards[0]!.getBoundingClientRect().top) return 0;
+      if (clientY >= cards.at(-1)!.getBoundingClientRect().bottom) return sections.length - 1;
+      return dragPointerRef.current?.destination ?? from;
+    }
+
+    const targetIndex = Number(target.dataset.sectionIndex);
+    const rect = target.getBoundingClientRect();
+    const insertIndex = targetIndex + (clientY > rect.top + rect.height / 2 ? 1 : 0);
+    return Math.max(0, Math.min(sections.length - 1, insertIndex > from ? insertIndex - 1 : insertIndex));
+  }
+
+  function animateSectionDrag(time: number) {
+    const drag = dragPointerRef.current;
+    const container = verseTabsRef.current;
+    if (!drag || !container) return;
 
     const rect = container.getBoundingClientRect();
-    const y = e.clientY;
-    const topEdge = rect.top;
-    const bottomEdge = rect.bottom;
-    const edgeThreshold = 55;
-
-    if (y < topEdge + edgeThreshold && y >= topEdge - 20) {
-      const distance = Math.max(0, y - topEdge);
-      const intensity = 1 - distance / edgeThreshold;
-      scrollVelocityRef.current = -Math.round(4 + intensity * 12);
-      startAutoScroll();
-    } else if (y > bottomEdge - edgeThreshold && y <= bottomEdge + 20) {
-      const distance = Math.max(0, bottomEdge - y);
-      const intensity = 1 - distance / edgeThreshold;
-      scrollVelocityRef.current = Math.round(4 + intensity * 12);
-      startAutoScroll();
-    } else {
-      stopAutoScroll();
+    const edgeSize = Math.min(72, rect.height * 0.22);
+    let speed = 0;
+    if (drag.clientY < rect.top + edgeSize) {
+      const intensity = Math.min(1, Math.max(0, (rect.top + edgeSize - drag.clientY) / edgeSize));
+      speed = -120 - 720 * intensity * intensity;
+    } else if (drag.clientY > rect.bottom - edgeSize) {
+      const intensity = Math.min(1, Math.max(0, (drag.clientY - (rect.bottom - edgeSize)) / edgeSize));
+      speed = 120 + 720 * intensity * intensity;
     }
-  };
+
+    if (drag.lastFrame) {
+      const elapsed = Math.min((time - drag.lastFrame) / 1000, 0.05);
+      container.scrollTop += speed * elapsed;
+    }
+    drag.lastFrame = time;
+
+    const destination = getSectionDropIndex(drag.clientX, drag.clientY, drag.from);
+    if (destination !== drag.destination) {
+      drag.destination = destination;
+      setDragOverIndex(destination);
+    }
+    drag.frame = requestAnimationFrame(animateSectionDrag);
+  }
+
+  function startSectionDrag(event: ReactPointerEvent<HTMLDivElement>, index: number) {
+    const target = event.target;
+    if (event.button !== 0 || !(target instanceof Element)
+      || !target.closest('.builder-section-tab')
+      || target.closest('.chorus-toggle')) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragPointerRef.current = {
+      pointerId: event.pointerId,
+      from: index,
+      destination: index,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      lastFrame: 0,
+      frame: requestAnimationFrame(animateSectionDrag),
+    };
+    setActive(index);
+    setTextSelection(null);
+    setDraggingSection(index);
+    setDragOverIndex(index);
+  }
+
+  function handleSectionPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = dragPointerRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    drag.clientX = event.clientX;
+    drag.clientY = event.clientY;
+  }
+
+  function finishSectionDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = dragPointerRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const destination = getSectionDropIndex(event.clientX, event.clientY, drag.from);
+    cancelAnimationFrame(drag.frame);
+    dragPointerRef.current = null;
+    setDraggingSection(null);
+    setDragOverIndex(null);
+    if (destination !== drag.from) moveSection(drag.from, destination);
+  }
+
+  function cancelSectionDrag() {
+    const drag = dragPointerRef.current;
+    if (drag) cancelAnimationFrame(drag.frame);
+    dragPointerRef.current = null;
+    setDraggingSection(null);
+    setDragOverIndex(null);
+  }
 
   useEffect(() => {
     return () => {
-      if (scrollRafRef.current !== null) {
-        cancelAnimationFrame(scrollRafRef.current);
-      }
+      const drag = dragPointerRef.current;
+      if (drag) cancelAnimationFrame(drag.frame);
+      dragPointerRef.current = null;
     };
   }, []);
   const [headerStyle, setHeaderStyle] = useState<HeaderStyle>(initialSong?.headerStyle ?? defaultHeaderStyle);
@@ -154,7 +212,7 @@ export function SongBuilder({ onClose, onApply, onSave, mode = 'song', initialSo
   }
   function close() { if (dirty) setConfirm(true); else onClose(); }
   function draft(): Song { return { title: title.trim(), author: sermon ? 'Your sermon' : 'Your lyrics', tag: sermon ? 'Sermon' : 'Custom', kind: mode, lyrics: sections.map(section => section.text), sections: sections.map(section => ({ ...section, chorus: sermon ? false : section.chorus })), background, backgroundType, ...(sermon ? { sermonText: lyrics, slideBreaks: sections.slice(0, -1).map((_, index) => index + 1) } : { headerStyle }) }; }
-  function submit(save: boolean) {
+  async function submit(save: boolean) {
     if (!title.trim()) {
       setError(sermon ? 'Give this sermon a title before applying or saving.' : 'Give this song a title before applying or saving.');
       setTitleNeedsAttention(true);
@@ -166,7 +224,16 @@ export function SongBuilder({ onClose, onApply, onSave, mode = 'song', initialSo
       return;
     }
     if (!sections.length) { setError(sermon ? 'Add at least one sermon section.' : 'Add at least one song verse.'); return; }
-    if (save) onSave(draft()); else { onApply(draft()); setApplied(true); setError(''); }
+    try {
+      if (save) await onSave(draft());
+      else {
+        await onApply(draft());
+        setApplied(true);
+      }
+      setError('');
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Could not save this song to the local workspace.');
+    }
   }
   return <Dialog open onOpenChange={open => { if (!open) close(); }}><DialogContent className="song-builder" onEscapeKeyDown={event => { event.preventDefault(); if (confirm) setConfirm(false); else close(); }}>
     <DialogHeader className="builder-heading"><div className="builder-eyebrow"><Music2 size={14}/> {sermon ? 'SERMON WORKSHOP' : 'SONG WORKSHOP'}</div><DialogTitle>{sermon ? 'New Sermon Builder' : initialSong ? 'Edit Song' : 'New Song Builder'}</DialogTitle><DialogDescription className="sr-only">Compose and style song or sermon slides.</DialogDescription></DialogHeader>
@@ -225,47 +292,15 @@ export function SongBuilder({ onClose, onApply, onSave, mode = 'song', initialSo
               className="verse-tabs"
               role="tablist"
               aria-label={sermon ? 'Sermon slides' : 'Song sections'}
-              onDragOver={handleContainerDragOver}
-              onDragLeave={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                  stopAutoScroll();
-                }
-              }}
-              onDrop={stopAutoScroll}
+              onPointerMove={handleSectionPointerMove}
+              onPointerUp={finishSectionDrag}
+              onPointerCancel={cancelSectionDrag}
             >
               {sections.map((section, index) => (
                 <div
                   key={index}
-                  draggable
-                  onDragStart={(event) => {
-                    setDraggingSection(index);
-                    event.dataTransfer.setData('text/plain', String(index));
-                    event.dataTransfer.effectAllowed = 'move';
-                  }}
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = 'move';
-                    if (draggingSection !== null && draggingSection !== index) {
-                      setDragOverIndex(index);
-                    }
-                  }}
-                  onDragLeave={() => {
-                    if (dragOverIndex === index) setDragOverIndex(null);
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    stopAutoScroll();
-                    setDragOverIndex(null);
-                    if (draggingSection !== null) {
-                      moveSection(draggingSection, index);
-                    }
-                    setDraggingSection(null);
-                  }}
-                  onDragEnd={() => {
-                    stopAutoScroll();
-                    setDraggingSection(null);
-                    setDragOverIndex(null);
-                  }}
+                  data-section-index={index}
+                  onPointerDown={(event) => startSectionDrag(event, index)}
                   className={`builder-section ${active === index ? 'selected' : ''} ${section.chorus ? 'is-chorus' : ''} ${draggingSection === index ? 'is-dragging' : ''} ${dragOverIndex === index ? 'is-drag-over' : ''}`}
                 >
                   <Button
@@ -309,7 +344,7 @@ export function SongBuilder({ onClose, onApply, onSave, mode = 'song', initialSo
         )}
       </div>
     </div>
-    <footer className="builder-footer"><span role="status" className={error ? 'builder-error' : 'builder-status'}>{error || (applied ? 'Applied to preparation · not saved' : 'Session-only draft')}</span><div><Button variant="ghost" onClick={close}>Discard</Button><Button variant="outline" className={`accent-action ${applied ? 'builder-apply-muted' : 'builder-apply-ready'}`} onClick={() => submit(false)}><Check size={14}/>Apply Changes</Button><Button onClick={() => submit(true)}><Save size={14}/>{sermon ? 'Save Sermon' : 'Save Song'}</Button></div></footer>
+    <footer className="builder-footer"><span role="status" className={error ? 'builder-error' : 'builder-status'}>{error || (applied ? 'Applied to preparation · saved locally' : 'Session-only draft')}</span><div><Button variant="ghost" onClick={close}>Discard</Button><Button variant="outline" className={`accent-action ${applied ? 'builder-apply-muted' : 'builder-apply-ready'}`} onClick={() => void submit(false)}><Check size={14}/>Apply Changes</Button><Button onClick={() => void submit(true)}><Save size={14}/>{sermon ? 'Save Sermon' : 'Save Song'}</Button></div></footer>
     {confirm && <div className="discard-overlay"><div role="alertdialog" aria-modal="true" aria-labelledby="discard-title" aria-describedby="discard-description" className="discard-dialog"><span className="discard-icon"><Music2 size={21}/></span><h3 id="discard-title">Discard this draft?</h3><p id="discard-description">Your unsaved song edits will be lost. Applied slides will remain in preparation.</p><div><Button autoFocus variant="outline" onClick={() => setConfirm(false)}>Keep editing</Button><Button variant="destructive" onClick={onClose}>Discard draft</Button></div></div></div>}
   </DialogContent></Dialog>;
 }

@@ -12,7 +12,8 @@
     "dev:all:tauri": "pnpm --parallel -r --filter @workspace/selah-studio --filter @workspace/api-server run dev:tauri",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "test": "pnpm --filter @workspace/scripts run test"
   },
   "private": true,
   "dependencies": {

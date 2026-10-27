@@ -62,13 +62,18 @@ import { Switch } from '@/components/ui/switch';
 import { BackgroundPicker } from './background-picker';
 import { WorkflowModal } from './workflow-modal';
 import { compileScripture, parseVerseRange, routePreview } from '@/lib/presentation';
-import { SlideScreen, welcomeSlide, type OutputState } from './slide-screen';
+import { parseSchedulePayload, serializeSchedulePayload, type SchedulePayload } from '@/lib/schedule';
+import { createStartupOutput, SlideScreen, welcomeSlide, type OutputState } from './slide-screen';
 import { useAppStore } from '@/lib/app-store';
 import {
   cachePassage,
   getCachedPassage,
+  mergeSongLibraries,
+  migrateLegacySongs,
   readTheme,
   readWorkspacePreferences,
+  removeLocalSong,
+  saveLocalSong,
   saveTheme,
   saveWorkspacePreferences,
   stashBackground,
@@ -76,6 +81,7 @@ import {
 import { getGetScriptureQueryKey, getScripture, useGetScripture } from '@workspace/api-client-react';
 import { usePushToTalk } from '@/hooks/use-push-to-talk';
 import { parseBibleContent } from '@/lib/scripture-content';
+import { searchPublicHymns, type PublicHymn } from '@/lib/song-search';
 import {
   searchOfflineBible,
   fetchOfflinePassage,
@@ -503,6 +509,9 @@ export function Studio() {
   const [currentScheduleName, setCurrentScheduleName] = useState(() => {
     try { return localStorage.getItem('selah-active-schedule-name') || 'Sunday_Worship_Service'; } catch { return 'Sunday_Worship_Service'; }
   });
+  const [managedScheduleName, setManagedScheduleName] = useState(() => {
+    try { return localStorage.getItem('selah-managed-schedule-name') || ''; } catch { return ''; }
+  });
   const [newScheduleOpen, setNewScheduleOpen] = useState(false);
   const [newScheduleName, setNewScheduleName] = useState('');
   const [newScheduleError, setNewScheduleError] = useState('');
@@ -521,7 +530,7 @@ export function Studio() {
     }
   }, []);
 
-  function rememberSchedule(payload: any) {
+  function rememberSchedule(payload: SchedulePayload) {
     const entry = {
       id: `${payload.name || 'Service Schedule'}-${payload.timestamp || Date.now()}`,
       name: payload.name || 'Service Schedule',
@@ -543,7 +552,7 @@ export function Studio() {
       scheduledSongs.push(song);
     }
     const activeScheduledSong = scheduledSongs.find((item) => item.title === song.title && item.kind === song.kind) ?? null;
-    const payload = {
+    const payload = parseSchedulePayload({
       version: '1.0',
       timestamp: new Date().toISOString(),
       name: currentScheduleName,
@@ -556,12 +565,22 @@ export function Studio() {
       mediaBackgroundType,
       scriptureBackgroundType,
       backgroundDim,
-    };
+    });
 
-    const jsonString = JSON.stringify(payload, null, 2);
+    const jsonString = serializeSchedulePayload(payload);
 
     if (isTauri()) {
       try {
+        if (managedScheduleName && managedScheduleName === currentScheduleName) {
+          const savedPath = await invoke<string>('save_schedule', {
+            name: currentScheduleName,
+            contents: jsonString,
+          });
+          rememberSchedule(payload);
+          setIsDirty(false);
+          setNotice(`Schedule saved to ${savedPath}.`);
+          return;
+        }
         const directory = await invoke<string>('prepare_schedules_directory');
         const defaultPath = await import('@tauri-apps/api/path').then(({ join }) => join(directory, `${safeScheduleFileName(currentScheduleName)}.selah`));
         const { save } = await import('@tauri-apps/plugin-dialog');
@@ -629,7 +648,7 @@ export function Studio() {
     }
 
     const timestamp = new Date().toISOString();
-    const payload = {
+    const payload = parseSchedulePayload({
       version: '1.0',
       timestamp,
       name,
@@ -642,7 +661,7 @@ export function Studio() {
       mediaBackgroundType,
       scriptureBackgroundType,
       backgroundDim,
-    };
+    });
 
     if (isTauri()) {
       try {
@@ -650,17 +669,18 @@ export function Studio() {
           name,
           contents: JSON.stringify(payload, null, 2),
         });
+        setManagedScheduleName(name);
         setNotice(`New schedule created at ${savedPath}.`);
       } catch (error) {
         setNewScheduleError(error instanceof Error ? error.message : String(error));
         return;
       }
     } else {
+      setManagedScheduleName('');
       setNotice('New schedule started. Save it to download the .selah file.');
     }
 
     setCurrentScheduleName(name);
-    setLibrarySongs([...songs]);
     setSlides([]);
     setMediaDeckSlides([]);
     setSelected(0);
@@ -675,19 +695,30 @@ export function Studio() {
   }
 
   // Load schedule from computer file or recent drawer
-  function applySchedulePayload(payload: any) {
-    const scheduleSlides: Slide[] = Array.isArray(payload.slides) ? payload.slides : [];
-    const scheduleDeck: Slide[] = Array.isArray(payload.mediaDeckSlides) ? payload.mediaDeckSlides : scheduleSlides;
+  function applySchedulePayload(value: unknown) {
+    let payload: SchedulePayload;
+    try {
+      payload = parseSchedulePayload(value);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Invalid .selah schedule file.');
+      return;
+    }
+
+    setManagedScheduleName('');
+    const scheduleSlides = payload.slides;
+    const scheduleDeck = payload.mediaDeckSlides;
     setSlides(scheduleSlides);
     setMediaDeckSlides(scheduleDeck);
-    const scheduleSongs: Song[] = Array.isArray(payload.songs) && payload.songs.length
-      ? payload.songs.filter((item: unknown): item is Song => Boolean(item && typeof item === 'object' && typeof (item as Song).title === 'string'))
-      : payload.song && typeof payload.song.title === 'string' ? [payload.song as Song] : [];
-    const primarySong = payload.song && typeof payload.song.title === 'string' ? payload.song as Song : scheduleSongs[0];
+    const scheduleSongs = payload.songs;
+    const primarySong = payload.song ?? scheduleSongs[0];
     setSong(primarySong ?? { title: '', author: '', tag: '', lyrics: [] });
     setLyrics(Array.isArray(primarySong?.lyrics) ? primarySong.lyrics.join('\n\n') : '');
     setPendingLibrarySong(null);
-    setLibrarySongs([...songs, ...scheduleSongs.filter((item: Song) => !songs.some((seed) => seed.title === item.title && seed.kind === item.kind))]);
+    setLibrarySongs((current) => mergeSongLibraries(songs, current, scheduleSongs));
+    void Promise.all(scheduleSongs.map((scheduledSong) => saveLocalSong(scheduledSong))).catch((error) => {
+      console.error('Could not save imported schedule songs to the local workspace.', error);
+      setSavedState('error');
+    });
     if (payload.scriptureBackground) setScriptureBackground(payload.scriptureBackground);
     if (payload.scriptureBackgroundType) setScriptureBackgroundType(payload.scriptureBackgroundType);
     if (payload.mediaBackground) setMediaBackground(payload.mediaBackground);
@@ -830,6 +861,16 @@ export function Studio() {
     } catch { /* Start with the built-in library. */ }
     return [...songs];
   });
+  useEffect(() => {
+    let cancelled = false;
+    void migrateLegacySongs().then((savedSongs) => {
+      if (!cancelled) setLibrarySongs((current) => mergeSongLibraries(songs, current, savedSongs));
+    }).catch((error) => {
+      console.error('Could not load saved songs from the local workspace.', error);
+      if (!cancelled) setSavedState('error');
+    });
+    return () => { cancelled = true; };
+  }, []);
   const [pendingLibrarySong, setPendingLibrarySong] = useState<Song | null>(null);
   const [bookFocused, setBookFocused] = useState(false);
   const [invalidField, setInvalidField] = useState('');
@@ -837,6 +878,9 @@ export function Studio() {
   const [theme, setTheme] = useState('teal');
   const [tab, setTab] = useState('Songs');
   const [search, setSearch] = useState('');
+  const [publicHymnQuery, setPublicHymnQuery] = useState('');
+  const [publicHymnResults, setPublicHymnResults] = useState<PublicHymn[]>([]);
+  const [publicHymnSearchState, setPublicHymnSearchState] = useState<'idle' | 'searching' | 'error'>('idle');
   const [song, setSong] = useState<Song>(defaultSong);
   const [slides, setSlides] = useState<Slide[]>([]);
   const [selected, setSelected] = useState(0);
@@ -844,15 +888,7 @@ export function Studio() {
   // Dedicated Media Presentation Deck states
   const [mediaDeckSlides, setMediaDeckSlides] = useState<Slide[]>([]);
   const [selectedMediaDeckIdx, setSelectedMediaDeckIdx] = useState<number | null>(null);
-  const [output, setOutput] = useState<OutputState>(() => {
-    try {
-      const cached = localStorage.getItem('selah-projector-latest');
-      if (cached) return JSON.parse(cached) as OutputState;
-    } catch {
-      // Clean start
-    }
-    return { slide: defaultSlide, mode: 'normal' };
-  });
+  const [output, setOutput] = useState<OutputState>(createStartupOutput);
 
   const [lyrics, setLyrics] = useState('');
   const [settings, setSettings] = useState(false);
@@ -868,6 +904,35 @@ export function Studio() {
   const outputRef = useRef(output);
   const chapterInput = useRef<HTMLInputElement>(null);
   const verseInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const query = publicHymnQuery.trim();
+    if (query.length < 2) {
+      setPublicHymnResults([]);
+      setPublicHymnSearchState('idle');
+      return;
+    }
+
+    setPublicHymnSearchState('searching');
+    const timeout = window.setTimeout(() => {
+      void searchPublicHymns(query, 8).then((results) => {
+        if (cancelled) return;
+        setPublicHymnResults(results);
+        setPublicHymnSearchState('idle');
+      }).catch((error) => {
+        console.error('Could not search the bundled public hymn catalog.', error);
+        if (cancelled) return;
+        setPublicHymnResults([]);
+        setPublicHymnSearchState('error');
+      });
+    }, 180);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [publicHymnQuery]);
 
   function resetWorkspaceLayout() {
     deckPaneRef.current?.style.removeProperty('height');
@@ -911,9 +976,10 @@ export function Studio() {
   useEffect(() => {
     try {
       localStorage.setItem('selah-active-schedule-name', currentScheduleName);
-      localStorage.setItem('selah-active-schedule-songs', JSON.stringify(librarySongs.filter((item) => !songs.some((seed) => seed.title === item.title && seed.kind === item.kind))));
+      if (managedScheduleName) localStorage.setItem('selah-managed-schedule-name', managedScheduleName);
+      else localStorage.removeItem('selah-managed-schedule-name');
     } catch { /* Browser storage may be unavailable. */ }
-  }, [currentScheduleName, librarySongs]);
+  }, [currentScheduleName, managedScheduleName]);
 
   const scriptureQuery = useGetScripture(
     lookupParams ?? { bibleId: DEFAULT_BIBLE_ID, passageId: 'GEN.1.1' },
@@ -1319,6 +1385,19 @@ export function Studio() {
     setNotice(`Loaded "${item.title}" with persistent background.`);
   }
 
+  async function persistSongLibraryItem(item: Song, previousSong?: Song) {
+    await saveLocalSong(item, previousSong);
+    setLibrarySongs((current) => mergeSongLibraries(
+      songs,
+      current.filter((existing) => !previousSong
+        || existing.title !== previousSong.title
+        || existing.kind !== previousSong.kind),
+      [item],
+    ));
+    setIsDirty(true);
+    setSavedState('saved');
+  }
+
   // Delete song permanently from library
   function handleDeleteSong(targetSong: Song, e: React.MouseEvent) {
     e.stopPropagation();
@@ -1329,6 +1408,10 @@ export function Studio() {
     if (!deleteTargetSong) return;
     const targetSong = deleteTargetSong;
     setLibrarySongs((prev) => prev.filter((song) => !(song.title === targetSong.title && song.kind === targetSong.kind)));
+    void removeLocalSong(targetSong).catch((error) => {
+      console.error('Could not delete the song from the local workspace.', error);
+      setSavedState('error');
+    });
     setIsDirty(true);
     setNotice(`Deleted "${targetSong.title}"`);
     setDeleteTargetSong(null);
@@ -1339,6 +1422,55 @@ export function Studio() {
     setBuilderMode(targetSong.kind === 'sermon' ? 'sermon' : 'song');
     setBuilderSong(targetSong);
     setBuilderOpen(true);
+  }
+
+  async function handleDuplicateSong(targetSong: Song, event: React.MouseEvent) {
+    event.stopPropagation();
+    const baseTitle = targetSong.title.replace(/\s*\(\d+\)$/, '').trim();
+    let copyNumber = 1;
+    let copyTitle = `${baseTitle}(${copyNumber})`;
+    while (librarySongs.some((item) => item.title === copyTitle && item.kind === targetSong.kind)) {
+      copyNumber += 1;
+      copyTitle = `${baseTitle}(${copyNumber})`;
+    }
+
+    const duplicate = { ...targetSong, title: copyTitle };
+    try {
+      await saveLocalSong(duplicate);
+      setLibrarySongs((current) => mergeSongLibraries(current, [duplicate]));
+      setNotice(`${targetSong.kind === 'sermon' ? 'Sermon' : 'Song'} copied as "${copyTitle}".`);
+    } catch (error) {
+      console.error('Could not copy the song to the local workspace.', error);
+      setSavedState('error');
+      setNotice('Could not copy this song. Check local storage and try again.');
+    }
+  }
+
+  async function addPublicHymnToLibrary(hymn: PublicHymn) {
+    const existing = librarySongs.find((item) => item.title === hymn.title && item.kind === 'song');
+    if (existing) {
+      loadSong(existing);
+      setNotice(`Loaded "${existing.title}" from your song library.`);
+      return;
+    }
+
+    const hymnSong: Song = {
+      title: hymn.title,
+      author: hymn.author,
+      tag: hymn.tag,
+      lyrics: hymn.lyrics,
+      kind: 'song',
+      sections: hymn.sections,
+    };
+    try {
+      await persistSongLibraryItem(hymnSong);
+      loadSong(hymnSong);
+      setNotice(`Added and loaded "${hymnSong.title}" from the public-domain catalog.`);
+    } catch (error) {
+      console.error('Could not save the public hymn to the local workspace.', error);
+      setSavedState('error');
+      setNotice('Could not save this hymn. Check local storage and try again.');
+    }
   }
 
   // Live typo editing updates the active schedule's song and deck.
@@ -1360,6 +1492,10 @@ export function Studio() {
 
         setSong(updatedSong);
         setLibrarySongs((prev) => prev.map((s) => (s.title === updatedSong.title ? updatedSong : s)));
+        void saveLocalSong(updatedSong).catch((error) => {
+          console.error('Could not save the edited song to the local workspace.', error);
+          setSavedState('error');
+        });
 
       }
 
@@ -2141,7 +2277,7 @@ export function Studio() {
                       .map((item) => (
                         <div
                           key={`${item.kind ?? 'song'}:${item.title}`}
-                          className={`song-row flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${pendingLibrarySong?.title === item.title ? 'bg-primary/10 border border-primary/40' : 'hover:bg-white/5 border border-transparent'
+                          className={`song-row flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${pendingLibrarySong?.title === item.title ? 'selected bg-primary/10 border border-primary/40' : 'hover:bg-white/5 border border-transparent'
                             }`}
                           role="button"
                           tabIndex={0}
@@ -2164,14 +2300,25 @@ export function Studio() {
                               type="button"
                               className="p-1 hover:text-primary text-slate-400 transition-colors"
                               title="Edit Song"
+                              aria-label={`Edit ${item.kind === 'sermon' ? 'sermon' : 'song'} ${item.title}`}
                               onClick={(e) => handleEditSong(item, e)}
                             >
                               <Edit2 size={13} />
                             </button>
                             <button
                               type="button"
+                              className="p-1 hover:text-primary text-slate-400 transition-colors"
+                              title={`Copy ${item.kind === 'sermon' ? 'sermon' : 'song'}`}
+                              aria-label={`Copy ${item.kind === 'sermon' ? 'sermon' : 'song'} ${item.title}`}
+                              onClick={(e) => void handleDuplicateSong(item, e)}
+                            >
+                              <Copy size={13} />
+                            </button>
+                            <button
+                              type="button"
                               className="p-1 hover:text-red-400 text-slate-400 transition-colors"
                               title="Delete Song"
+                              aria-label={`Delete ${item.kind === 'sermon' ? 'sermon' : 'song'} ${item.title}`}
                               onClick={(e) => handleDeleteSong(item, e)}
                             >
                               <Trash2 size={13} />
@@ -2180,8 +2327,40 @@ export function Studio() {
                         </div>
                       ))}
                   </div>
-
-
+                  <section className="public-hymn-search" aria-label="Public-domain hymn catalog">
+                    <label className="search-input">
+                      <Search size={15} />
+                      <input
+                        aria-label="Search public-domain hymns"
+                        placeholder="Search public-domain hymns…"
+                        value={publicHymnQuery}
+                        onChange={(event) => setPublicHymnQuery(event.target.value)}
+                      />
+                    </label>
+                    {publicHymnSearchState === 'searching' && <p className="public-hymn-status" role="status">Searching bundled hymns…</p>}
+                    {publicHymnSearchState === 'error' && <p className="public-hymn-status" role="alert">The bundled hymn catalog could not be loaded.</p>}
+                    {publicHymnQuery.trim().length >= 2 && publicHymnSearchState === 'idle' && publicHymnResults.length === 0 && (
+                      <p className="public-hymn-status" role="status">No public-domain hymns found.</p>
+                    )}
+                    {publicHymnResults.map((hymn) => (
+                      <article className="public-hymn-result" key={hymn.id}>
+                        <div className="public-hymn-result-heading">
+                          <div>
+                            <strong>{hymn.title}</strong>
+                            <span>{hymn.author}</span>
+                          </div>
+                          <Button size="sm" className="accent-action" onClick={() => void addPublicHymnToLibrary(hymn)}>
+                            <Plus size={12} /> Add & Load
+                          </Button>
+                        </div>
+                        <details>
+                          <summary>Lyrics · Public domain</summary>
+                          <p>{hymn.lyrics.join('\n\n')}</p>
+                          <small>Source: {hymn.source}</small>
+                        </details>
+                      </article>
+                    ))}
+                  </section>
                 </>
               )}
 
@@ -3031,19 +3210,16 @@ export function Studio() {
             mode={builderMode}
             initialSong={builderSong}
             onClose={() => setBuilderOpen(false)}
-            onApply={(item) => {
+            onApply={async (item) => {
+              await persistSongLibraryItem(item, builderSong);
+              setBuilderSong(item);
               loadSong(item);
-              setNotice(`${item.kind === 'sermon' ? 'Sermon' : 'Song'} staged in preview`);
+              setNotice(`${item.kind === 'sermon' ? 'Sermon' : 'Song'} saved and staged in preview`);
             }}
-            onSave={(item) => {
-              setLibrarySongs((items) => [
-                ...items.filter((existing) => existing.title !== item.title || existing.kind !== item.kind),
-                item,
-              ]);
-              setIsDirty(true);
+            onSave={async (item) => {
+              await persistSongLibraryItem(item, builderSong);
               setBuilderOpen(false);
-              setSavedState('saved');
-              setNotice(`${item.kind === 'sermon' ? 'Sermon' : 'Song'} saved in "${currentScheduleName}". Save the schedule to write it to disk.`);
+              setNotice(`${item.kind === 'sermon' ? 'Sermon' : 'Song'} saved to this computer.`);
             }}
           />
         )}
@@ -3161,46 +3337,20 @@ export function Studio() {
 }
 
 export function Projector() {
-  const [output, setOutput] = useState<OutputState>(() => {
-    try {
-      const cached = localStorage.getItem('selah-projector-latest');
-      if (cached) return JSON.parse(cached) as OutputState;
-    } catch {
-      // Local fallback
-    }
-    return { slide: welcomeSlide, mode: 'normal', backgroundDim: 50 };
-  });
+  const [output, setOutput] = useState<OutputState>(createStartupOutput);
 
   useEffect(() => {
     const bc = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('selah_projector_channel');
     const requestCurrentOutput = () => postChannelMessage(bc, { type: 'request' });
     if (bc) bc.onmessage = (event) => {
       if (event.data?.type === 'output' && event.data.output?.slide) setOutput(event.data.output);
-      if (event.data?.type === 'request') {
-        try {
-          const cached = localStorage.getItem('selah-projector-latest');
-          if (cached) postChannelMessage(bc, { type: 'output', output: JSON.parse(cached) as OutputState });
-        } catch {
-          // fallback
-        }
-      }
     };
     requestCurrentOutput();
-    const recover = () => {
-      try {
-        const cached = localStorage.getItem('selah-projector-latest');
-        if (cached) setOutput(JSON.parse(cached) as OutputState);
-      } catch {
-        // fallback
-      }
-    };
-    window.addEventListener('focus', recover);
-    window.addEventListener('storage', recover);
+    window.addEventListener('focus', requestCurrentOutput);
     window.addEventListener('pageshow', requestCurrentOutput);
     document.addEventListener('visibilitychange', requestCurrentOutput);
     return () => {
-      window.removeEventListener('focus', recover);
-      window.removeEventListener('storage', recover);
+      window.removeEventListener('focus', requestCurrentOutput);
       window.removeEventListener('pageshow', requestCurrentOutput);
       document.removeEventListener('visibilitychange', requestCurrentOutput);
       bc?.close();

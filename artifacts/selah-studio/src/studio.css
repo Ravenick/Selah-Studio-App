@@ -675,21 +675,97 @@ kbd {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  padding: 2px 3px 4px;
+}
+
+.public-hymn-search {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.public-hymn-status {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+
+.public-hymn-result {
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--surface) 88%, transparent);
+}
+
+.public-hymn-result-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.public-hymn-result-heading>div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.public-hymn-result-heading strong,
+.public-hymn-result-heading span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.public-hymn-result-heading strong {
+  color: var(--foreground);
+  font-size: 11px;
+}
+
+.public-hymn-result-heading span,
+.public-hymn-result details small {
+  color: var(--muted-foreground);
+  font-size: 9px;
+}
+
+.public-hymn-result details {
+  margin-top: 7px;
+}
+
+.public-hymn-result summary {
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.public-hymn-result details p {
+  max-height: 150px;
+  margin: 7px 0;
+  overflow: auto;
+  color: var(--foreground);
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
 
 .song-row {
   justify-content: flex-start;
-  height: 64px;
+  height: 60px;
   border: 1px solid transparent;
   padding: 10px;
-  width: 90%;
+  width: 100%;
+  min-width: 0;
   gap: 10px;
 }
 
-.song-row.active {
-  border-color: color-mix(in oklab, var(--primary) 30%, transparent);
+.song-row.selected {
+  border: 2px solid var(--primary) !important;
   background: color-mix(in oklab, var(--primary) 5%, transparent);
-  box-shadow: inset 2px 0 0 var(--primary);
+  box-shadow: inset 3px 0 0 var(--primary);
+  transition: none;
 }
 
 .song-icon {
@@ -703,7 +779,7 @@ kbd {
   color: var(--muted-foreground);
 }
 
-.song-row.active .song-icon {
+.song-row.selected .song-icon {
   color: var(--primary);
   background: color-mix(in oklab, var(--primary) 8%, transparent);
   border-color: color-mix(in oklab, var(--primary) 15%, transparent);
@@ -3391,7 +3467,7 @@ h1 {
   overflow-y: auto;
   padding-right: 5px;
   margin-bottom: 12px;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 .builder-section {
@@ -3446,6 +3522,8 @@ h1 {
 .builder-drag-grip {
   opacity: 0.45;
   transition: opacity .15s, color .15s;
+  cursor: grab;
+  touch-action: none;
 }
 
 .builder-section:hover .builder-drag-grip {

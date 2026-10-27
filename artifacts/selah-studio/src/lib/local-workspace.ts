@@ -50,7 +50,15 @@ class SelahWorkspace extends Dexie {
 }
 
 export const workspaceDb = new SelahWorkspace();
-const recordId = (song: Song) => `${song.kind === 'sermon' ? 'sermon' : 'song'}:${song.title.toLocaleLowerCase()}`;
+const LEGACY_SONGS_KEY = 'selah-active-schedule-songs';
+const LEGACY_SONGS_MIGRATION_ID = 'legacy-songs-migrated-v1';
+const recordId = (song: Song) => `${song.kind === 'sermon' ? 'sermon' : 'song'}:${song.title.trim().toLocaleLowerCase()}`;
+
+export function mergeSongLibraries(...libraries: Song[][]): Song[] {
+  const records = new Map<string, Song>();
+  for (const song of libraries.flat()) records.set(recordId(song), song);
+  return [...records.values()];
+}
 
 function createAssetId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -70,10 +78,61 @@ export async function readSavedSongs() {
   const [songs, sermons] = await Promise.all([workspaceDb.songs.toArray(), workspaceDb.sermons.toArray()]);
   return [...songs, ...sermons].map(({ id: _id, ...song }) => song);
 }
-export async function saveLocalSong(song: Song) {
+
+export function parseLegacySongs(value: unknown): Song[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): Song[] => {
+    if (!item || typeof item !== 'object') return [];
+    const candidate = item as Partial<Song>;
+    if (typeof candidate.title !== 'string' || !candidate.title.trim()
+      || !Array.isArray(candidate.lyrics) || !candidate.lyrics.every((line) => typeof line === 'string')) return [];
+    return [{
+      ...candidate,
+      title: candidate.title,
+      author: typeof candidate.author === 'string' ? candidate.author : '',
+      tag: typeof candidate.tag === 'string' ? candidate.tag : '',
+      lyrics: candidate.lyrics,
+      kind: candidate.kind === 'sermon' ? 'sermon' : 'song',
+    } as Song];
+  });
+}
+
+export async function migrateLegacySongs(): Promise<Song[]> {
+  if (!(await workspaceDb.themes.get(LEGACY_SONGS_MIGRATION_ID))) {
+    let legacySongs: Song[] = [];
+    let canCompleteMigration = true;
+    try {
+      const stored = localStorage.getItem(LEGACY_SONGS_KEY);
+      if (stored) legacySongs = parseLegacySongs(JSON.parse(stored));
+    } catch {
+      canCompleteMigration = false;
+    }
+
+    if (canCompleteMigration) {
+      await workspaceDb.transaction('rw', workspaceDb.songs, workspaceDb.sermons, workspaceDb.themes, async () => {
+        if (await workspaceDb.themes.get(LEGACY_SONGS_MIGRATION_ID)) return;
+        for (const song of legacySongs) {
+          const table = song.kind === 'sermon' ? workspaceDb.sermons : workspaceDb.songs;
+          const id = recordId(song);
+          if (!(await table.get(id))) await table.put({ ...song, id });
+        }
+        await workspaceDb.themes.put({ id: LEGACY_SONGS_MIGRATION_ID, value: 'complete' });
+      });
+    }
+  }
+  return readSavedSongs();
+}
+
+export async function saveLocalSong(song: Song, previousSong?: Song) {
   const record = { ...song, id: recordId(song) };
-  if (song.kind === 'sermon') await workspaceDb.sermons.put(record);
-  else await workspaceDb.songs.put(record);
+  const table = song.kind === 'sermon' ? workspaceDb.sermons : workspaceDb.songs;
+  await workspaceDb.transaction('rw', workspaceDb.songs, workspaceDb.sermons, async () => {
+    await table.put(record);
+    if (previousSong && recordId(previousSong) !== record.id) {
+      const previousTable = previousSong.kind === 'sermon' ? workspaceDb.sermons : workspaceDb.songs;
+      await previousTable.delete(recordId(previousSong));
+    }
+  });
 }
 export async function removeLocalSong(song: Song) {
   const id = recordId(song);

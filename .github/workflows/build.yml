@@ -39,6 +39,12 @@ jobs:
       - name: Install workspace packages
         run: pnpm install --frozen-lockfile
 
+      - name: Typecheck workspace
+        run: pnpm typecheck
+
+      - name: Run focused application tests
+        run: pnpm test
+
       - name: Build Windows installers
         run: pnpm --filter @workspace/selah-studio run build:desktop
 

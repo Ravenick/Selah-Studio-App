@@ -89,7 +89,7 @@ const BOOK_FILE_NAMES: Record<string, string> = {
 export async function getBookList(): Promise<string[]> {
   if (booksListCache) return booksListCache;
   try {
-    const res = await fetch(`${import.meta.env.BASE_URL}kjv/Books.json`);
+    const res = await fetch(`${import.meta.env?.BASE_URL ?? '/'}kjv/Books.json`);
     if (res.ok) {
       booksListCache = (await res.json()) as string[];
       return booksListCache;
@@ -107,7 +107,8 @@ export async function loadOfflineBook(bookName: string): Promise<KjvBookData | n
 
   const fileName = BOOK_FILE_NAMES[canonical] || canonical;
   try {
-    const res = await fetch(`${import.meta.env.BASE_URL}kjv/${encodeURIComponent(fileName)}.json`);
+    const baseUrl = import.meta.env?.BASE_URL ?? '/';
+    const res = await fetch(`${baseUrl}kjv/${encodeURIComponent(fileName)}.json`);
     if (!res.ok) return null;
     const data = (await res.json()) as KjvBookData;
     bookCache.set(canonical, data);

@@ -2,23 +2,15 @@ import React from 'react';
 import { cloneElement, isValidElement, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type ReactElement } from 'react';
 import { getBackgroundBlob } from '@/lib/local-workspace';
 import type { Slide } from '@/lib/studio-data';
+import { createStartupOutput, welcomeSlide, type OutputState } from '@/lib/projector-state';
 import { useFitText } from '@/hooks/use-fit-text';
 import { FormattedText } from './formatted-text';
 import { useScriptureAppearance } from '@/lib/scripture-appearance';
 
+export { createStartupOutput, welcomeSlide, type OutputState } from '@/lib/projector-state';
+
 const mountain = { url: '/selah-atmosphere.svg' };
 const logo = { url: '/selah-logo.png' };
-
-export type OutputState = {
-  slide: Slide;
-  mode: 'normal' | 'blackout' | 'clear' | 'logo';
-  transitionMode?: 'cold' | 'fade' | 'blur-words';
-  backgroundDim?: number;
-};
-
-export const welcomeSlide: Slide = {
-  id: 'welcome', title: 'Welcome Walk', label: 'Welcome', text: 'Welcome home.', kind: 'media',
-};
 
 function isLocalAsset(value?: string) {
   return Boolean(value?.startsWith('local-background:'));

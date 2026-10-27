@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { useTranscribeAudio } from '@workspace/api-client-react';
+import { transcribeAudio } from '@workspace/api-client-react';
 import { isTauri } from '@tauri-apps/api/core';
 
 type SpeechRecognitionResult = { results: ArrayLike<ArrayLike<{ transcript: string; isFinal?: boolean }>>; error?: string };
@@ -24,7 +24,6 @@ export function usePushToTalk(onTranscript: (text: string) => void) {
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
   const latestTranscript = useRef<string>('');
-  const mutation = useTranscribeAudio();
 
   const start = useCallback(async () => {
     if (listening || transcribing) return;
@@ -33,7 +32,7 @@ export function usePushToTalk(onTranscript: (text: string) => void) {
     const browser = window as SpeechWindow;
     const Speech = browser.SpeechRecognition ?? browser.webkitSpeechRecognition;
 
-    if (!isTauri() && Speech) {
+    if (Speech) {
       try {
         const instance = new Speech();
         recognition.current = instance;
@@ -78,9 +77,15 @@ export function usePushToTalk(onTranscript: (text: string) => void) {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : undefined,
-      });
+      const preferredMimeType = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/ogg',
+        'audio/mp4',
+        'audio/wav',
+      ].find((type) => MediaRecorder.isTypeSupported(type));
+      const mediaRecorder = new MediaRecorder(stream, preferredMimeType ? { mimeType: preferredMimeType } : undefined);
       recorder.current = mediaRecorder;
       chunks.current = [];
       mediaRecorder.ondataavailable = (event) => {
@@ -88,14 +93,16 @@ export function usePushToTalk(onTranscript: (text: string) => void) {
       };
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach((track) => track.stop());
-        const audio = new Blob(chunks.current, { type: mediaRecorder.mimeType || 'audio/webm' });
+        const audio = new Blob(chunks.current, { type: mediaRecorder.mimeType || preferredMimeType || 'application/octet-stream' });
         if (!audio.size) {
           setError('No audio was captured. Check that the microphone is enabled, then press and hold Push to Talk while speaking.');
           return;
         }
         setTranscribing(true);
         try {
-          const result = await mutation.mutateAsync({ data: audio });
+          const result = await transcribeAudio(audio, {
+            headers: { 'Content-Type': audio.type || 'application/octet-stream' },
+          });
           const transcript = typeof result?.text === 'string' ? result.text.trim() : '';
           if (transcript) {
             latestTranscript.current = transcript;
@@ -124,7 +131,7 @@ export function usePushToTalk(onTranscript: (text: string) => void) {
     } catch {
       setError('Microphone permission was denied or unavailable.');
     }
-  }, [listening, transcribing, mutation, onTranscript]);
+  }, [listening, transcribing, onTranscript]);
 
   const stop = useCallback(() => {
     if (recognition.current) {

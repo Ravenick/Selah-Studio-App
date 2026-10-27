@@ -3,6 +3,21 @@
   "outputDirectory": "artifacts/selah-studio/dist/public",
   "installCommand": "pnpm install --frozen-lockfile",
   "framework": "vite",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; media-src 'self' blob: https:; connect-src 'self' https:; frame-src https://www.youtube-nocookie.com"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "microphone=(self)"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/(.*)",

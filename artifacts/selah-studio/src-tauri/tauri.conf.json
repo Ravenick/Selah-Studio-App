@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob: https:; font-src 'self' asset: http://asset.localhost data:; media-src 'self' asset: http://asset.localhost blob: https:; connect-src 'self' ipc: http://ipc.localhost https:; frame-src https://www.youtube-nocookie.com",
       "capabilities": [
         "default",
         "projector"

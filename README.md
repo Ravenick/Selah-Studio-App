@@ -9,35 +9,44 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` starts the studio and API server together. `pnpm dev:studio` starts only the frontend. Online Bible versions and online speech recognition need the API server; KJV and offline speech recognition run on the device.
+`pnpm dev` starts the studio and API server together. `pnpm dev:studio` starts only the frontend. Run `pnpm typecheck` and `pnpm test` to check the workspace. Online Bible versions and speech-transcription fallback need the API server; the bundled KJV works without it.
 
 ## Local data and offline behavior
 
 The browser database is the Dexie instance in `artifacts/selah-studio/src/lib/local-workspace.ts`.
 
 - `songs` and `sermons` store editable presentation content.
+- Legacy songs from `selah-active-schedule-songs` are migrated into Dexie on startup. The original localStorage value is left intact as a recovery backup.
 - `verses` uses `[bibleId+book+chapter+verse]` as its compound key and caches fetched passage text.
 - `themes` stores presentation preferences.
 - `backgrounds` stores web files as IndexedDB blobs and Tauri asset metadata as local paths.
 - In the desktop app, large media files live in `Documents/SelahStudio/Assets/`.
 
-Cached songs, sermons, themes, scripture, and media remain available offline. A missing scripture passage is fetched from API.Bible and added to the local cache. The app does not require `DATABASE_URL`, Postgres, or an account.
+Saved songs, sermons, themes, cached scripture, the bundled KJV, and local media remain available offline. A missing non-KJV passage is fetched from API.Bible and added to the local cache. The app does not require `DATABASE_URL`, Postgres, or an account.
 
 ## Public hymn search
 
-The public-hymn search reads the bundled `artifacts/selah-studio/public/openhymnal.201406.xml` archive and parses it in the browser. It is available offline, uses no cloud song database, and only returns entries whose source record explicitly says `copyright: public domain`. Each result retains its author credit and links to the Open Hymnal copying terms.
+The Songs library searches the bundled `artifacts/selah-studio/public/openhymnal.201406.xml` archive for title, author, or lyric text. Search works offline and only returns entries whose source record explicitly says `copyright: public domain`. Results include the author and full lyrics; Add & Load saves the song to Dexie and stages it in the deck.
 
 ## Presentation state and projector
 
-`useAppStore` owns the active preview slide, live output slide, auto-live setting, and active canvas track. The operator broadcasts output state over `BroadcastChannel("selah_projector_channel")`; a projector opened later requests the latest output and the operator responds. The last output is also saved locally to restore the display after reload.
+`useAppStore` owns the active preview slide, live output slide, auto-live setting, and active canvas track. The operator broadcasts output state over `BroadcastChannel("selah_projector_channel")`; a projector opened later requests the current output and the operator responds. On startup, the operator and projector begin in animated logo mode instead of restoring stale slide content.
 
 ## Speech input
 
-Push-to-talk defaults to Offline mode and uses Whisper Tiny English through Transformers.js and WebAssembly. Production builds download and bundle the quantized model, so speech recognition is available offline from the first launch. Development downloads and caches the model the first time Offline mode is used. The existing speech-reference parser converts recognized words into Bible references, and KJV passages load from the bundled Bible data. Online mode records audio and sends it to the API server for Hugging Face transcription. The model build step includes the upstream Whisper license with the bundled model files.
+Push-to-talk uses the browser/WebView SpeechRecognition API when available. If unavailable, it records audio and sends it to the API server for Hugging Face transcription, which requires an internet connection. Recognized references are parsed locally, and KJV passages load from bundled Bible data. No offline speech model is included.
+
+## Schedule files
+
+Schedule exports use JSON version `1.0`. Imports validate slide and song data before changing the workspace, accept older versionless schedules, and reject unsupported future versions with an error. Unknown fields in supported schedules are preserved for forward compatibility. Tauri schedules created in the app save back to their managed file without reopening Save As; imported files still use Save As until created as a managed schedule.
+
+## Security policy
+
+Tauri and Vercel builds apply a Content Security Policy restricted to same-origin application code, local assets, HTTPS network/media, and the YouTube no-cookie frame. The Vercel policy permits microphone access for browser speech recognition.
 
 ## Provider credentials
 
-The API server reads `API_BIBLE_KEY` and `HF_ACCESS_TOKEN` from its environment. Do not add these values to `VITE_*` variables, source files, or the frontend bundle. For a hosted web frontend, configure `VITE_API_BASE_URL` to point to the API server, or serve the API on the same origin. Desktop release builds need `VITE_TAURI_API_BASE_URL` set to a deployed API service; keep provider credentials on that service. API.Bible access to NIV, NKJV, and NLT depends on the account's license and available Bible IDs.
+The API server reads `API_BIBLE_KEY` and `HF_ACCESS_TOKEN` from its environment. Do not add these values to `VITE_*` variables, source files, or the frontend bundle. For a hosted web frontend, configure `VITE_API_BASE_URL` to point to the API server, or serve the API on the same origin. Tauri uses WebView SpeechRecognition when available; if unavailable, configure `VITE_TAURI_API_BASE_URL` for remote transcription. Keep provider credentials on the API service. API.Bible access to NIV, NKJV, and NLT depends on the account's license and available Bible IDs.
 
 ## Desktop and releases
 
