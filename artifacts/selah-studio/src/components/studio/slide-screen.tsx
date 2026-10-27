@@ -1,5 +1,5 @@
 import React from 'react';
-import { cloneElement, isValidElement, useEffect, useRef, useState, type ReactNode, type ReactElement } from 'react';
+import { cloneElement, isValidElement, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type ReactElement } from 'react';
 import { getBackgroundBlob } from '@/lib/local-workspace';
 import type { Slide } from '@/lib/studio-data';
 import { useFitText } from '@/hooks/use-fit-text';
@@ -195,6 +195,8 @@ export function SlideScreen({
 
   const [resolvedMedia, setResolvedMedia] = useState('');
   const [mediaError, setMediaError] = useState('');
+  const copyRef = useRef<HTMLDivElement>(null);
+  const headingRef = useRef<HTMLElement>(null);
   const textBoundaryRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLParagraphElement>(null);
   const scriptureAppearance = useScriptureAppearance();
@@ -273,10 +275,42 @@ export function SlideScreen({
     contentRef: textRef,
     enabled: !isStandaloneMedia && mode === 'normal',
     contentKey: `${slide.id}|${slide.kind}|${scriptureAppearance.font}|${slide.heading ?? ''}|${slide.text}|${JSON.stringify(slide.formats ?? [])}|${JSON.stringify(slide.verses ?? [])}`,
-    minFont: 12,
-    // Keep the operator's default live text at the requested readable baseline.
-    maxFont: 16.9,
   });
+
+  // A verse/chorus marker follows the actual wrapped text block. Short lyrics
+  // keep it close; additional lines naturally move both the text's top edge and
+  // the marker upward, without letting either cross the output-safe top edge.
+  useLayoutEffect(() => {
+    const copy = copyRef.current;
+    const marker = headingRef.current;
+    const text = textRef.current;
+    if (!copy || !marker || !text || !slide.heading) return;
+
+    let frame = 0;
+    const positionMarker = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const copyRect = copy.getBoundingClientRect();
+        const textRect = text.getBoundingClientRect();
+        const markerRect = marker.getBoundingClientRect();
+        if (!copyRect.height || !textRect.height || !markerRect.height) return;
+
+        const safeTop = copyRect.height * 0.06;
+        const gap = Math.max(6, copyRect.height * 0.018);
+        const desiredTop = textRect.top - copyRect.top - markerRect.height - gap;
+        marker.style.top = `${Math.max(safeTop, desiredTop)}px`;
+      });
+    };
+
+    positionMarker();
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(positionMarker);
+    observer?.observe(copy);
+    observer?.observe(text);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
+  }, [fittedFontSize, slide.heading, slide.text, slide.verses]);
 
   return (
     <div className={`slide-screen ${slide.kind === 'scripture' ? 'scripture-screen' : ''} ${slide.kind === 'song' || slide.kind === 'sermon' ? 'song-screen' : ''} ${slide.verses ? 'compiled-scripture' : ''} ${slide.chorus ? 'chorus-screen' : ''} ${mode === 'blackout' ? 'screen-blackout' : ''} ${isStandaloneMedia ? 'standalone-media-screen' : ''} ${className}`} style={{ '--scripture-font': headerFonts[scriptureAppearance.font] ?? 'ui-monospace, monospace', '--scripture-text-color': scriptureAppearance.textColor } as React.CSSProperties}>
@@ -317,9 +351,10 @@ export function SlideScreen({
           <img className="output-logo" src={logo.url} alt="Selah Studio" />
         </div>
       ) : mode === 'clear' || isStandaloneMedia ? null : (
-        <div key={`text-${animationKey}`} className={`screen-copy ${stageClass}`}>
+        <div ref={copyRef} key={`text-${animationKey}`} className={`screen-copy ${stageClass}`}>
           {slide.heading && (
             <strong
+              ref={headingRef}
               className="song-slide-heading"
               style={{
                 color: headerColors[slide.headingStyle?.color ?? 'white'] ?? slide.headingStyle?.color ?? 'var(--screen-text)',

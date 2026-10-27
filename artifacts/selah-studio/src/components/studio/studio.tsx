@@ -220,6 +220,67 @@ const guideSteps = [
   { title: 'You’re ready to go live.', copy: 'Press Enter to project live. Use F1 (Blackout), F2 (Clear Text), or F3 (Logo) for instant control.', icon: Radio },
 ];
 
+function LibraryVideoThumb({ src, isScrolling }: { src: string; isScrolling: boolean }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const isVisibleRef = useRef(false);
+  const isHoveredRef = useRef(false);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          isVisibleRef.current = entry.isIntersecting;
+          if (entry.isIntersecting && !isScrolling) {
+            el.play().catch(() => {});
+          } else {
+            el.pause();
+          }
+        }
+      },
+      { threshold: 0.05 }
+    );
+
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+    };
+  }, [isScrolling]);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    if (isScrolling) {
+      el.pause();
+    } else if (isVisibleRef.current || isHoveredRef.current) {
+      el.play().catch(() => {});
+    }
+  }, [isScrolling]);
+
+  return (
+    <video
+      ref={videoRef}
+      src={src}
+      muted
+      loop
+      playsInline
+      preload="metadata"
+      onMouseEnter={() => {
+        isHoveredRef.current = true;
+        videoRef.current?.play().catch(() => {});
+      }}
+      onMouseLeave={() => {
+        isHoveredRef.current = false;
+        if (!isVisibleRef.current) {
+          videoRef.current?.pause();
+        }
+      }}
+    />
+  );
+}
+
 export function Studio() {
   // Hidden Upload Input Refs
   const [transitionMode, setTransitionMode] = useState<'cold' | 'fade'>('fade');
@@ -238,6 +299,18 @@ export function Studio() {
   ).values());
   // Media Explorer Modal State
   const [isMediaExplorerOpen, setIsMediaExplorerOpen] = useState(false);
+  const [isBackgroundScrolling, setIsBackgroundScrolling] = useState(false);
+  const backgroundScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleBackgroundScroll = useCallback(() => {
+    if (backgroundScrollTimeoutRef.current) {
+      clearTimeout(backgroundScrollTimeoutRef.current);
+    }
+    setIsBackgroundScrolling(true);
+    backgroundScrollTimeoutRef.current = setTimeout(() => {
+      setIsBackgroundScrolling(false);
+    }, 140);
+  }, []);
   const [mediaBackground, setMediaBackground] = useState('/backgrounds/motion/Blue Particles.mp4');
   const [mediaBackgroundType, setMediaBackgroundType] = useState<'image' | 'video'>('video');
   const [backgroundDim, setBackgroundDim] = useState(50);
@@ -1589,7 +1662,7 @@ export function Studio() {
     const isScripture = scriptureBackground === asset.url;
     const isSong = mediaBackground === asset.url;
     return <article className="background-library-card" key={asset.id}>
-      <div className="background-library-thumb">{asset.type === 'video' ? <video src={asset.url} muted autoPlay loop playsInline /> : <img src={asset.url} alt="" />}</div>
+      <div className="background-library-thumb">{asset.type === 'video' ? <LibraryVideoThumb src={asset.url} isScrolling={isBackgroundScrolling} /> : <img src={asset.url} alt="" loading="lazy" decoding="async" />}</div>
       <strong title={asset.title}>{asset.title}</strong>
       <div className="background-targets" role="group" aria-label={`Assign ${asset.title} background`}>
         <button type="button" className={isScripture ? 'active' : ''} aria-pressed={isScripture} onClick={() => chooseScriptureBackground(asset)}><span className="target-radio"/>Scripture</button>
@@ -2877,7 +2950,7 @@ export function Studio() {
               </div>
 
               {/* Internal Scrollable Content */}
-              <div className="grid grid-cols-1 gap-6 overflow-y-auto pr-2 flex-1 scrollbar-thin">
+              <div className="grid grid-cols-1 gap-6 overflow-y-auto pr-2 flex-1 scrollbar-thin background-library-scroll" onScroll={handleBackgroundScroll}>
 
                 {/* ==================== SONG / SERMON COLUMN ==================== */}
                 <div className="flex flex-col gap-4">
@@ -2900,7 +2973,7 @@ export function Studio() {
                         </Button>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="background-library-grid">
                       {availableBackgrounds.filter((asset) => asset.type === 'video').map(renderBackgroundCard)}
                     </div>
                   </div>
@@ -2918,7 +2991,7 @@ export function Studio() {
                         </Button>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="background-library-grid">
                       {availableBackgrounds.filter((asset) => asset.type === 'image').map(renderBackgroundCard)}
                     </div>
                   </div>

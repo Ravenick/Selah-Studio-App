@@ -9,12 +9,12 @@ type FitTextOptions = {
   maxFont?: number;
 };
 
-const EPSILON = 1;
+const EPSILON = 0;
 
 /**
  * Finds the largest readable font size that fits every wrapped line inside the
- * supplied boundary. A hidden clone is measured before the visible text is
- * updated, preventing a transient overflowing render on live output.
+ * supplied boundary. The hidden copy keeps the slide's CSS context so font,
+ * weight, verse markers, and line-height match the visible output.
  */
 export function useFitText({
   boundaryRef,
@@ -22,9 +22,9 @@ export function useFitText({
   contentKey,
   enabled = true,
   minFont = 12,
-  maxFont = 16.9,
+  maxFont,
 }: FitTextOptions) {
-  const [fontSize, setFontSize] = useState(maxFont);
+  const [fontSize, setFontSize] = useState(maxFont ?? 16.9);
 
   useLayoutEffect(() => {
     if (!enabled) return;
@@ -35,49 +35,72 @@ export function useFitText({
     let frame = 0;
     let disposed = false;
 
-    const scheduleFit = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        if (disposed) return;
-        const width = Math.floor(boundary.clientWidth);
-        const height = Math.floor(boundary.clientHeight);
+    const fit = () => {
+      if (disposed) return;
+      const screen = boundary.closest<HTMLElement>('.slide-screen');
+      const copy = content.closest<HTMLElement>('.screen-copy');
+      if (!screen || !copy) return;
+
+      const probeCopy = copy.cloneNode(true) as HTMLElement;
+      probeCopy.style.setProperty('animation', 'none', 'important');
+      probeCopy.style.setProperty('transition', 'none', 'important');
+      probeCopy.style.setProperty('visibility', 'hidden', 'important');
+      probeCopy.style.setProperty('pointer-events', 'none', 'important');
+      screen.appendChild(probeCopy);
+
+      try {
+        const probeBoundary = probeCopy.querySelector<HTMLElement>('.slide-text-boundary');
+        const probeText = probeBoundary?.querySelector<HTMLElement>(':scope > p');
+        if (!probeBoundary || !probeText) return;
+
+        const width = probeBoundary.clientWidth;
+        const height = probeBoundary.clientHeight;
         if (!width || !height) return;
 
-        const probe = content.cloneNode(true) as HTMLElement;
-        const sourceStyle = window.getComputedStyle(content);
-        probe.style.cssText = [
-          'position:fixed', 'left:-100000px', 'top:0', 'visibility:hidden',
-          'pointer-events:none', 'display:block', 'box-sizing:border-box',
-          `width:${width}px`, 'height:auto', 'min-height:0', 'max-width:100%',
-          'margin:0', 'padding:0', `font-family:${sourceStyle.fontFamily}`,
-          `font-weight:${sourceStyle.fontWeight}`, `font-style:${sourceStyle.fontStyle}`,
-          'line-height:1.18', `letter-spacing:${sourceStyle.letterSpacing}`,
-          `text-transform:${sourceStyle.textTransform}`, 'white-space:pre-wrap',
-          'overflow-wrap:anywhere', 'word-break:normal',
-        ].join(';');
-        document.body.appendChild(probe);
+        const fits = (candidate: number) => {
+          probeText.style.setProperty('font-size', `${candidate}px`, 'important');
+          const boundaryRect = probeBoundary.getBoundingClientRect();
+          const textRect = probeText.getBoundingClientRect();
+          return probeText.scrollHeight <= Math.ceil(textRect.height)
+            && probeText.scrollWidth <= Math.ceil(textRect.width)
+            && textRect.top >= boundaryRect.top - EPSILON
+            && textRect.left >= boundaryRect.left - EPSILON
+            && textRect.bottom <= boundaryRect.bottom + EPSILON
+            && textRect.right <= boundaryRect.right + EPSILON;
+        };
 
-        let low = minFont;
-        let high = maxFont;
-        let best = minFont;
-        for (let pass = 0; pass < 10; pass += 1) {
-          const candidate = (low + high) / 2;
-          probe.style.fontSize = `${candidate}px`;
-          const overflowing = probe.scrollHeight > height + EPSILON || probe.scrollWidth > width + EPSILON;
-          if (overflowing) high = candidate;
-          else {
-            best = candidate;
-            low = candidate;
+        const targetMax = maxFont ?? Math.min(120, width * 0.075);
+        const search = (floor: number, ceiling: number) => {
+          let low = floor;
+          let high = ceiling;
+          let best = 0;
+          for (let pass = 0; pass < 18; pass += 1) {
+            const candidate = (low + high) / 2;
+            if (fits(candidate)) {
+              best = candidate;
+              low = candidate;
+            } else {
+              high = candidate;
+            }
           }
-        }
-        probe.remove();
+          return best;
+        };
 
-        const next = Math.max(minFont, Math.floor(best * 10) / 10);
+        let best = fits(minFont) ? search(minFont, Math.max(minFont, targetMax)) : search(1, minFont);
+        if (!best) best = 1;
+        const next = Math.max(1, Math.floor(best * 10) / 10);
         setFontSize((current) => (Math.abs(current - next) < 0.1 ? current : next));
-      });
+      } finally {
+        probeCopy.remove();
+      }
     };
 
-    scheduleFit();
+    const scheduleFit = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(fit);
+    };
+
+    fit();
     const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(scheduleFit);
     observer?.observe(boundary);
     void document.fonts?.ready.then(scheduleFit);

@@ -22,7 +22,6 @@ export function SelectionEditor({
   activeTab: controlledTab,
   onActiveTabChange,
   showTabs = true,
-  maxLines,
 }: {
   text: string;
   formats?: TextFormat[];
@@ -33,7 +32,6 @@ export function SelectionEditor({
   activeTab?: 'text' | 'style';
   onActiveTabChange?: (tab: 'text' | 'style') => void;
   showTabs?: boolean;
-  maxLines?: number;
 }) {
   const input = useRef<HTMLTextAreaElement>(null);
   const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
@@ -76,7 +74,6 @@ export function SelectionEditor({
           value={text}
           onChange={(event) => {
             const nextText = event.target.value;
-            if (maxLines && nextText.split(/\r\n|\r|\n/).length > maxLines) return;
             onChange(nextText);
             setSelection(null);
             onSelectionChange?.(null);
@@ -143,7 +140,7 @@ export function SelectionEditor({
       )}
 
       <div className="editor-status-bar">
-        <span>{text.split(/\r\n|\r|\n/).length}{maxLines ? ` / ${maxLines}` : ''} lines</span>
+        <span>{text.split(/\r\n|\r|\n/).length} lines</span>
         <span>{text.length} characters</span>
       </div>
     </div>
