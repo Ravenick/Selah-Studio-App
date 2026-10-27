@@ -240,7 +240,7 @@ export function Studio() {
   const [isMediaExplorerOpen, setIsMediaExplorerOpen] = useState(false);
   const [mediaBackground, setMediaBackground] = useState('/backgrounds/motion/Blue Particles.mp4');
   const [mediaBackgroundType, setMediaBackgroundType] = useState<'image' | 'video'>('video');
-  const [backgroundDim, setBackgroundDim] = useState(75);
+  const [backgroundDim, setBackgroundDim] = useState(50);
   // Handle Custom Uploads for Scripture
   function handleUploadScriptureAsset(e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') {
     const file = e.target.files?.[0];
@@ -1846,7 +1846,7 @@ export function Studio() {
                 {voiceFeedback.parsed && (
                   <Button
                     size="sm"
-                    className="bg-primary text-black font-semibold"
+                    className="accent-action font-semibold"
                     onClick={() => acceptVoiceFeedback(voiceFeedback.parsed!)}
                   >
                     <Check size={13} className="mr-1" />Enter ↵
@@ -1889,7 +1889,7 @@ export function Studio() {
             <Action tip="Workspace Settings" variant="ghost" size="icon" onClick={() => setSettings(true)}>
               <Settings2 />
             </Action>
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1 ml-2" onClick={launchProjector}>
+            <Button size="sm" variant="outline" className="accent-action h-7 text-xs gap-1 ml-2" onClick={launchProjector}>
               <ExternalLink size={12} /> Projector
             </Button>
           </div>
@@ -2477,10 +2477,10 @@ export function Studio() {
                     </Button>
                     <div className="flex gap-2">
                       <input aria-label="YouTube URL" value={youtubeMediaUrl} onChange={(e) => setYoutubeMediaUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addYoutubeMedia(); } }} placeholder="Paste YouTube / live URL" className="min-w-0 flex-1 h-9 rounded-md border border-white/15 bg-black/40 px-2 text-xs text-white outline-none focus:border-primary" />
-                      <Button aria-label="Add YouTube media" title="Add YouTube media" className="h-9 px-3" onClick={addYoutubeMedia}><Link2 size={14} /></Button>
+                    <Button aria-label="Add YouTube media" title="Add YouTube media" className="accent-action h-9 px-3" onClick={addYoutubeMedia}><Link2 size={14} /></Button>
                     </div>
                     <div className="text-[10px] text-slate-400">{mediaDeckSlides.filter((item) => item.kind === 'media' && item.mediaUrl).length} standalone media item(s) in deck</div>
-                    <Button variant="outline" className="w-full h-9 text-xs" onClick={() => setIsMediaExplorerOpen(true)}>
+                    <Button variant="outline" className="accent-action w-full h-9 text-xs" onClick={() => setIsMediaExplorerOpen(true)}>
                       <ImageIcon size={14} className="mr-1.5" /> Choose Local Stills & Motion Loops
                     </Button>
                     {(() => {
@@ -2680,7 +2680,7 @@ export function Studio() {
                   onChange={(e) => setEditingText(e.target.value)}
                 />
                 <div className="flex justify-end gap-2">
-                  <Button size="sm" className="h-7 text-xs bg-primary text-black font-bold" onClick={saveSlideTypoFix}>
+                  <Button size="sm" className="accent-action h-7 text-xs font-bold" onClick={saveSlideTypoFix}>
                     Apply Changes & Sync Global Song
                   </Button>
                 </div>
@@ -2765,6 +2765,7 @@ export function Studio() {
                       </span>
                     )}
                     <Switch
+                      className="accent-live-toggle"
                       checked={autoPush}
                       onCheckedChange={(val) => {
                         setAutoPush(val);
@@ -3094,7 +3095,7 @@ export function Projector() {
     } catch {
       // Local fallback
     }
-    return { slide: welcomeSlide, mode: 'normal', backgroundDim: 75 };
+    return { slide: welcomeSlide, mode: 'normal', backgroundDim: 50 };
   });
 
   useEffect(() => {
@@ -3135,7 +3136,7 @@ export function Projector() {
 
   return (
     <div className="projector-view">
-      <SlideScreen slide={output.slide} mode={output.mode} transitionMode={output.transitionMode ?? "blur-words"} backgroundDim={output.backgroundDim ?? 75} />
+      <SlideScreen slide={output.slide} mode={output.mode} transitionMode={output.transitionMode ?? "blur-words"} backgroundDim={output.backgroundDim ?? 50} />
       <Button
         variant="ghost"
         size="icon"
