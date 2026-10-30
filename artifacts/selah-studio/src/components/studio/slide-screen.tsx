@@ -354,7 +354,13 @@ export function SlideScreen({
           )}
 
           <div ref={textBoundaryRef} className="slide-text-boundary">
-          <p ref={textRef} style={{ fontSize: `${fittedFontSize}px` }}>
+          <p
+            ref={textRef}
+            style={{
+              fontSize: `${fittedFontSize}px`,
+              ...(slide.kind === 'scripture' ? { fontWeight: 900, WebkitTextStroke: '.3px currentColor' } : {}),
+            }}
+          >
             {slide.verses ? (
               slide.verses.map((verse, i) => (
                 <span className="scripture-verse" key={i}>

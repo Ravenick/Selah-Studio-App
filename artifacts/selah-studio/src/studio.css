@@ -6821,6 +6821,11 @@ h1 {
   font-weight: 800;
 }
 
+.scripture-screen .screen-copy p {
+  font-weight: 900;
+  -webkit-text-stroke: .3px currentColor;
+}
+
 /* Scripture starts higher in the resource panel so the reference controls and
    selectable chapter sequence are not crowded against the lower edge. */
 .library-content:has(.scripture-entry) {
