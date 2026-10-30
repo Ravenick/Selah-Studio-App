@@ -46,7 +46,7 @@ Tauri and Vercel builds apply a Content Security Policy restricted to same-origi
 
 ## Provider credentials
 
-The API server reads `API_BIBLE_KEY` and `HF_ACCESS_TOKEN` from its environment. Do not add these values to `VITE_*` variables, source files, or the frontend bundle. For a hosted web frontend, configure `VITE_API_BASE_URL` to point to the API server, or serve the API on the same origin. Tauri uses WebView SpeechRecognition when available; if unavailable, configure `VITE_TAURI_API_BASE_URL` for remote transcription. Keep provider credentials on the API service. API.Bible access to NIV, NKJV, and NLT depends on the account's license and available Bible IDs.
+The API server reads `API_BIBLE_KEY` and `HF_ACCESS_TOKEN` from its environment. Do not add these values to `VITE_*` variables, source files, or the frontend bundle. For a hosted web frontend, configure `VITE_API_BASE_URL` to point to the API server, or serve the API on the same origin. Tauri uses WebView SpeechRecognition when available; if unavailable, configure `VITE_TAURI_API_BASE_URL` for remote transcription. The transcription server defaults to `openai/whisper-large-v3` through Hugging Face Inference Providers; the Hugging Face token needs Inference Providers permission. Optional fallback model IDs can be set with `VITE_HF_MODEL_FALLBACK_1` through `_3`. Keep provider credentials on the API service. API.Bible access to NIV, NKJV, and NLT depends on the account's license and available Bible IDs.
 
 ## Desktop and releases
 

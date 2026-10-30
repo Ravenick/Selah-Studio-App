@@ -8,11 +8,11 @@ import {
 const router: IRouter = Router();
 const bibleApiBase = process.env.VITE_API_BIBLE_ENDPOINT || "https://rest.api.bible/v1";
 const whisperModels = [
-  process.env.VITE_HF_MODEL_PRIMARY || "openai/whisper-tiny",
-  process.env.VITE_HF_MODEL_FALLBACK_1 || "openai/whisper-base",
-  process.env.VITE_HF_MODEL_FALLBACK_2 || "openai/whisper-small",
-  process.env.VITE_HF_MODEL_FALLBACK_3 || "openai/whisper-medium",
-] as const;
+  process.env.VITE_HF_MODEL_PRIMARY?.trim() || "openai/whisper-large-v3",
+  process.env.VITE_HF_MODEL_FALLBACK_1,
+  process.env.VITE_HF_MODEL_FALLBACK_2,
+  process.env.VITE_HF_MODEL_FALLBACK_3,
+].map((model) => model?.trim()).filter((model): model is string => Boolean(model));
 const maxAudioBytes = 25 * 1024 * 1024;
 
 type ApiBiblePassage = {
@@ -138,6 +138,7 @@ router.post(
     new Uint8Array(audioBuffer).set(req.body);
     const audio = new Blob([audioBuffer], { type: audioType });
 
+    const failedStatuses: number[] = [];
     for (const model of whisperModels) {
       try {
         const response = await fetch(
@@ -155,6 +156,7 @@ router.post(
         );
 
         if (!response.ok) {
+          failedStatuses.push(response.status);
           req.log.warn(
             { model, upstreamStatus: response.status },
             "Whisper model failed; trying the next model",
@@ -183,8 +185,27 @@ router.post(
       }
     }
 
+    if (failedStatuses.some((status) => status === 401 || status === 403)) {
+      res.status(502).json({
+        error: "Hugging Face rejected the transcription request. Verify HF_ACCESS_TOKEN is valid and has Inference Providers permission.",
+      });
+      return;
+    }
+    if (failedStatuses.length && failedStatuses.every((status) => status === 404 || status === 410)) {
+      res.status(502).json({
+        error: "No configured Whisper model is available through Hugging Face Inference. Use openai/whisper-large-v3 or configure supported fallback models.",
+      });
+      return;
+    }
+    if (failedStatuses.includes(429)) {
+      res.status(503).json({
+        error: "Hugging Face transcription is rate limited or out of quota. Check your Inference Providers usage and try again.",
+      });
+      return;
+    }
+
     res.status(502).json({
-      error: "Speech transcription failed on all configured models.",
+      error: "Hugging Face transcription failed for all configured models. Check the API server logs for upstream status codes and verify HF_ACCESS_TOKEN and model availability.",
     });
   },
 );
