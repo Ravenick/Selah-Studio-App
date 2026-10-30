@@ -33,3 +33,28 @@ export function compileScripture(book: string, chapter: string, verses: string[]
   });
 }
 export function routePreview(slide: Slide, autoPush: boolean) { return { preview: slide, live: autoPush ? slide : null }; }
+
+export function prepareMediaDeck(currentDeck: Slide[], additions: Slide[], type: 'media' | 'album', otherDeckSlides: Slide[]) {
+  const appendStandalone = type === 'media'
+    && otherDeckSlides.length === 0
+    && currentDeck.length > 0
+    && currentDeck.every((slide) => (
+      slide.kind === 'media'
+      && slide.mediaAlbumId === undefined
+      && slide.mediaUrl?.startsWith('local-background:')
+      && (slide.mediaType === 'image' || slide.mediaType === 'video')
+    ));
+  const baseDeck = appendStandalone ? currentDeck : [];
+  const knownIds = new Set(baseDeck.map((slide) => slide.id));
+  const uniqueAdditions = additions.filter((slide) => {
+    if (knownIds.has(slide.id)) return false;
+    knownIds.add(slide.id);
+    return true;
+  });
+  const deck = [...baseDeck, ...uniqueAdditions];
+  return {
+    deck,
+    selectedIndex: deck.findIndex((slide) => slide.id === additions[0]?.id),
+    clearOtherDeck: !appendStandalone,
+  };
+}

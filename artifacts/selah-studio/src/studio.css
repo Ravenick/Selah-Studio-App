@@ -5356,6 +5356,43 @@ h1 {
   background: #000;
 }
 
+.standalone-image-layer {
+  position: absolute;
+  inset: 0;
+  transition: opacity 280ms ease-in-out;
+}
+
+.standalone-media-previous,
+.standalone-media-incoming {
+  position: absolute;
+  inset: 0;
+}
+
+.standalone-media-previous {
+  z-index: 0;
+}
+
+.standalone-media-incoming {
+  z-index: 1;
+}
+
+.standalone-media-enter {
+  animation: standaloneMediaFadeIn 280ms ease-in-out both;
+}
+
+@keyframes standaloneMediaFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .standalone-image-layer,
+  .standalone-media-enter {
+    transition-duration: 1ms;
+    animation-duration: 1ms;
+  }
+}
+
 .standalone-media-stage iframe {
   display: block;
   width: 100%;

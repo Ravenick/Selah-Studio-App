@@ -1,5 +1,5 @@
 import React from 'react';
-import { cloneElement, isValidElement, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type ReactElement } from 'react';
+import { cloneElement, isValidElement, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type ReactElement } from 'react';
 import { getBackgroundObjectUrl } from '@/lib/local-workspace';
 import type { Slide } from '@/lib/studio-data';
 import { createStartupOutput, welcomeSlide, type OutputState } from '@/lib/projector-state';
@@ -143,6 +143,65 @@ export function TransitionText({
   );
 }
 
+function CrossfadeImage({ source, alt, onError }: { source: string; alt: string; onError: () => void }) {
+  const [current, setCurrent] = useState(source);
+  const [incoming, setIncoming] = useState('');
+  const [incomingVisible, setIncomingVisible] = useState(false);
+  const currentRef = useRef(source);
+
+  useEffect(() => {
+    if (!source) return;
+    if (source === currentRef.current) {
+      setIncoming('');
+      setIncomingVisible(false);
+      return;
+    }
+
+    let active = true;
+    let frame = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    setIncoming('');
+    setIncomingVisible(false);
+    const preload = new Image();
+    preload.onload = () => {
+      if (!active) return;
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        currentRef.current = source;
+        setCurrent(source);
+        return;
+      }
+      setIncoming(source);
+      frame = requestAnimationFrame(() => {
+        if (active) setIncomingVisible(true);
+      });
+      timer = setTimeout(() => {
+        if (!active) return;
+        currentRef.current = source;
+        setCurrent(source);
+        setIncoming('');
+        setIncomingVisible(false);
+      }, 280);
+    };
+    preload.onerror = () => {
+      if (active) onError();
+    };
+    preload.src = source;
+
+    return () => {
+      active = false;
+      cancelAnimationFrame(frame);
+      if (timer) clearTimeout(timer);
+    };
+  }, [source, onError]);
+
+  return (
+    <>
+      {current && <img src={current} className="standalone-media-content standalone-image-layer" alt={alt} style={{ opacity: incomingVisible ? 0 : 1 }} onError={() => { if (currentRef.current === current) onError(); }} />}
+      {incoming && <img src={incoming} className="standalone-media-content standalone-image-layer" alt={alt} style={{ opacity: incomingVisible ? 1 : 0 }} onError={() => { if (incoming === source) onError(); }} />}
+    </>
+  );
+}
+
 const transitionStyles = `
   .selah-transition { width: 100%; display: block; }
   
@@ -173,6 +232,7 @@ export function SlideScreen({
   className = '',
   backgroundDim = 50,
   preview = false,
+  mediaRevision = 0,
 }: {
   slide: Slide;
   mode?: 'normal' | 'blackout' | 'clear' | 'logo';
@@ -180,6 +240,7 @@ export function SlideScreen({
   className?: string;
   backgroundDim?: number;
   preview?: boolean;
+  mediaRevision?: number;
 }) {
   // 1. Safe transition class definition (Fixes 'stageClass is not defined')
   const stageClass = transitionMode === 'cold' ? 'selah-transition-cold' : 'selah-transition-fade';
@@ -187,7 +248,15 @@ export function SlideScreen({
   const [resolvedBackground, setResolvedBackground] = useState('');
 
   const [resolvedMedia, setResolvedMedia] = useState('');
+  const [resolvedMediaType, setResolvedMediaType] = useState<Slide['mediaType']>();
+  const [transitionMedia, setTransitionMedia] = useState<{ url: string; type: Slide['mediaType'] } | null>(null);
   const [mediaError, setMediaError] = useState('');
+  const previousMediaTypeRef = useRef(slide.mediaType);
+  const resolvedMediaRef = useRef<{ url: string; type: Slide['mediaType'] } | undefined>(undefined);
+  const transitionTimer = useRef<number | undefined>(undefined);
+  const handleImageError = useCallback(() => {
+    setMediaError(`Could not display schedule media “${slide.title}” (schedule item “${slide.title}”). Restore or replace the file in the Media pane.`);
+  }, [slide.title]);
   const copyRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLElement>(null);
   const textBoundaryRef = useRef<HTMLDivElement>(null);
@@ -221,27 +290,51 @@ export function SlideScreen({
 
   useEffect(() => {
     let alive = true;
+    if (transitionTimer.current !== undefined) window.clearTimeout(transitionTimer.current);
     const source = slide.mediaUrl;
+    const previousMediaType = previousMediaTypeRef.current;
+    previousMediaTypeRef.current = slide.mediaType;
     if (!isLocalAsset(source)) {
       setResolvedMedia(source || '');
+      setResolvedMediaType(slide.mediaType);
+      resolvedMediaRef.current = source ? { url: source, type: slide.mediaType } : undefined;
+      setTransitionMedia(null);
       setMediaError('');
       return;
     }
-    setResolvedMedia('');
+    const previous = resolvedMediaRef.current;
+    if (previous && previous.type !== slide.mediaType) setTransitionMedia(previous);
+    if (slide.mediaType !== 'image' || previousMediaType !== 'image') setResolvedMedia('');
     setMediaError('');
+    if (!previous || previous.type === slide.mediaType) setMediaError('Loading media…');
     void getBackgroundObjectUrl(source!.slice('local-background:'.length)).then((url) => {
       if (alive && url) {
         setResolvedMedia(url);
+        setResolvedMediaType(slide.mediaType);
+        resolvedMediaRef.current = { url, type: slide.mediaType };
+        setMediaError('');
+        if (previous && previous.type !== slide.mediaType) {
+          transitionTimer.current = window.setTimeout(() => {
+            setTransitionMedia((current) => current?.url === previous.url ? null : current);
+            transitionTimer.current = undefined;
+          }, 320);
+        } else {
+          setTransitionMedia(null);
+        }
       } else if (alive) {
-        setMediaError('This local media file could not be opened.');
+        setMediaError(`Missing schedule media “${slide.title}” (schedule item “${slide.title}”). Locate the original file in the Media pane to restore it.`);
       }
     }).catch(() => {
-      if (alive) setMediaError('This local media file could not be opened.');
+      if (alive) setMediaError(`Missing schedule media “${slide.title}” (schedule item “${slide.title}”). Locate the original file in the Media pane to restore it.`);
     });
     return () => {
       alive = false;
+      if (transitionTimer.current !== undefined) {
+        window.clearTimeout(transitionTimer.current);
+        transitionTimer.current = undefined;
+      }
     };
-  }, [slide.mediaUrl]);
+  }, [slide.mediaUrl, slide.mediaType, slide.title, mediaRevision]);
 
   useEffect(() => {
     if (slide.mediaType !== 'youtube' || !resolvedMedia) return;
@@ -255,6 +348,16 @@ export function SlideScreen({
   const isBackgroundVideo = slide.backgroundType === 'video' || Boolean(background && /\.(mp4|webm|mov)(\?|$)/i.test(background));
   const isStandaloneMedia = slide.kind === 'media' && Boolean(slide.mediaUrl);
   const youtubeEmbed = slide.mediaType === 'youtube' && resolvedMedia ? youtubeUrlForEmbed(resolvedMedia) : '';
+  const priorMedia = transitionMedia ?? (
+    resolvedMedia && resolvedMediaType !== slide.mediaType
+      ? { url: resolvedMedia, type: resolvedMediaType }
+      : null
+  );
+  const renderPriorMedia = () => priorMedia?.type === 'video'
+    ? <video src={priorMedia.url} className="standalone-media-content standalone-media-previous" autoPlay loop playsInline muted preload="auto" />
+    : priorMedia?.type === 'image'
+      ? <img src={priorMedia.url} className="standalone-media-content standalone-media-previous" alt="" />
+      : null;
 
   const fittedFontSize = useFitText({
     boundaryRef: textBoundaryRef,
@@ -316,9 +419,23 @@ export function SlideScreen({
               />
             ) : <div className="standalone-media-error">Loading YouTube video…</div>
           ) : slide.mediaType === 'video' ? (
-            resolvedMedia ? <video src={resolvedMedia} className="standalone-media-content" autoPlay loop playsInline preload="auto" controls muted={audioMuted} onError={() => setMediaError('This video could not be played on the projector.')} /> : <div className="standalone-media-error">{mediaError}</div>
+            resolvedMedia && resolvedMediaType === 'video'
+              ? <>
+                {renderPriorMedia()}
+                <video src={resolvedMedia} className={`standalone-media-content ${priorMedia ? 'standalone-media-incoming standalone-media-enter' : ''}`} autoPlay loop playsInline preload="auto" controls muted={audioMuted} onError={() => setMediaError(`This video could not be played: “${slide.title}”.`)} />
+              </>
+              : <>{renderPriorMedia()}<div className="standalone-media-error">{mediaError || `Loading “${slide.title}”…`}</div></>
           ) : (
-            resolvedMedia ? <img src={resolvedMedia} className="standalone-media-content" alt={slide.title || 'Presentation media'} onError={() => setMediaError('This image could not be displayed on the projector.')} /> : <div className="standalone-media-error">{mediaError}</div>
+            resolvedMedia && resolvedMediaType === 'image'
+              ? <>
+                {renderPriorMedia()}
+                <div className={priorMedia ? 'standalone-media-incoming standalone-media-enter' : undefined}>
+                  {mediaError
+                    ? <div className="standalone-media-error">{mediaError}</div>
+                    : <CrossfadeImage source={resolvedMedia} alt={slide.title || 'Presentation media'} onError={handleImageError} />}
+                </div>
+              </>
+              : <>{renderPriorMedia()}<div className="standalone-media-error">{mediaError || `Loading “${slide.title}”…`}</div></>
           )}
         </div>
       )}

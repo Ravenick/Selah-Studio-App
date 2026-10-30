@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Slide, Song } from './studio-data';
+import type { ScheduleMediaSnapshot } from './local-workspace';
 
 const textFormatSchema = z.object({
   start: z.number().int().min(0),
@@ -53,8 +54,30 @@ const slideSchema = z.object({
   formats: z.array(textFormatSchema).optional(),
   mediaUrl: z.string().optional(),
   mediaType: z.enum(['image', 'video', 'youtube']).optional(),
+  mediaAlbumId: z.string().optional(),
   audioMuted: z.boolean().optional(),
   youtubeUrl: z.string().optional(),
+}).passthrough();
+
+const scheduleMediaSchema = z.object({
+  media: z.array(z.object({
+    id: z.string().min(1),
+    name: z.string(),
+    mimeType: z.string().optional(),
+    size: z.number().nonnegative().optional(),
+    createdAt: z.number().nonnegative().optional(),
+    purpose: z.enum(['background', 'media']).optional(),
+    albumId: z.string().optional(),
+    type: z.enum(['image', 'video']),
+  }).passthrough()),
+  albums: z.array(z.object({
+    id: z.string().min(1),
+    name: z.string(),
+    description: z.string(),
+    mediaIds: z.array(z.string()),
+    createdAt: z.number().nonnegative(),
+    updatedAt: z.number().nonnegative(),
+  }).passthrough()),
 }).passthrough();
 
 const scheduleSchema = z.object({
@@ -63,6 +86,7 @@ const scheduleSchema = z.object({
   name: z.string().trim().min(1).max(200).optional(),
   slides: z.array(slideSchema).optional(),
   mediaDeckSlides: z.array(slideSchema).optional(),
+  mediaLibrary: scheduleMediaSchema.optional(),
   song: songSchema.nullable().optional(),
   songs: z.array(songSchema).optional(),
   scriptureBackground: z.string().optional(),
@@ -83,6 +107,7 @@ export type SchedulePayload = {
   name: string;
   slides: Slide[];
   mediaDeckSlides: Slide[];
+  mediaLibrary?: ScheduleMediaSnapshot;
   song: Song | null;
   songs: Song[];
   scriptureBackground?: string;
@@ -116,6 +141,13 @@ export function parseSchedulePayload(value: unknown): SchedulePayload {
   const slides = data.slides ?? [];
   const song = data.song ?? data.songs?.[0] ?? null;
   const songs = data.songs?.length ? data.songs : song ? [song] : [];
+  const mediaItems = new Map((data.mediaLibrary?.media ?? []).map((item) => [item.id, item]));
+  const mediaDeckSlides = (data.mediaDeckSlides ?? slides).map((slide) => {
+    if (slide.kind !== 'media' || !slide.mediaUrl?.startsWith('local-background:') || slide.mediaAlbumId) return slide;
+    const id = slide.mediaUrl.slice('local-background:'.length);
+    const albumId = mediaItems.get(id)?.albumId;
+    return albumId ? { ...slide, mediaAlbumId: albumId } : slide;
+  });
   const timestamp = data.timestamp && Number.isFinite(Date.parse(data.timestamp))
     ? data.timestamp
     : new Date().toISOString();
@@ -126,7 +158,7 @@ export function parseSchedulePayload(value: unknown): SchedulePayload {
     timestamp,
     name: data.name ?? 'Imported Service',
     slides: slides as Slide[],
-    mediaDeckSlides: (data.mediaDeckSlides ?? slides) as Slide[],
+    mediaDeckSlides: mediaDeckSlides as Slide[],
     song: song as Song | null,
     songs: songs as Song[],
   };

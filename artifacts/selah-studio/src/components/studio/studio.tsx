@@ -61,22 +61,24 @@ import { SongBuilder } from './song-builder';
 import { Switch } from '@/components/ui/switch';
 import { BackgroundPicker } from './background-picker';
 import { WorkflowModal } from './workflow-modal';
-import { compileScripture, parseVerseRange, routePreview } from '@/lib/presentation';
+import { compileScripture, parseVerseRange, prepareMediaDeck, routePreview } from '@/lib/presentation';
 import { parseSchedulePayload, serializeSchedulePayload, type SchedulePayload } from '@/lib/schedule';
 import { createStartupOutput, SlideScreen, welcomeSlide, type OutputState } from './slide-screen';
 import { useAppStore } from '@/lib/app-store';
 import {
   cachePassage,
+  createScheduleMediaSnapshot,
   getCachedPassage,
   mergeSongLibraries,
   migrateLegacySongs,
   readTheme,
   readWorkspacePreferences,
   removeLocalSong,
+  replaceMediaFile,
+  type ScheduleMediaSnapshot,
   saveLocalSong,
   saveTheme,
   saveWorkspacePreferences,
-  stashBackground,
 } from '@/lib/local-workspace';
 import { getGetScriptureQueryKey, getScripture, useGetScripture } from '@workspace/api-client-react';
 import { usePushToTalk } from '@/hooks/use-push-to-talk';
@@ -91,6 +93,7 @@ import {
   type SequenceVerseItem,
 } from '@/lib/offline-bible';
 import { parseSpokenBibleReference, type ParsedSpokenReference } from '@/lib/spoken-bible-parser';
+import { DeckMediaThumbnail, MediaLibrary } from './media-library';
 
 import { invoke, isTauri } from '@tauri-apps/api/core';
 
@@ -298,7 +301,6 @@ export function Studio() {
   const scriptureStillInputRef = useRef<HTMLInputElement>(null);
   const mediaMotionInputRef = useRef<HTMLInputElement>(null);
   const mediaStillInputRef = useRef<HTMLInputElement>(null);
-  const standaloneMediaInputRef = useRef<HTMLInputElement>(null);
   const [youtubeMediaUrl, setYoutubeMediaUrl] = useState('');
   // Custom uploaded backgrounds state
   const [customScriptureBgs, setCustomScriptureBgs] = useState<MediaAsset[]>([]);
@@ -360,62 +362,6 @@ export function Studio() {
     setCustomMediaBgs((prev) => [newAsset, ...prev]);
     chooseMediaBackground(newAsset);
     setNotice(`Uploaded custom song/sermon ${type === 'video' ? 'motion loop' : 'still'}.`);
-  }
-
-  // Standalone media is a deck item, not a background applied behind lyrics.
-  async function handleStandaloneMediaUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    e.target.value = '';
-    if (!files.length) return;
-    try {
-      const additions: Slide[] = [];
-      let skippedTooLarge = 0;
-      let skippedInvalid = 0;
-      for (const file of files) {
-        if (file.size > 200 * 1024 * 1024) {
-          skippedTooLarge++;
-          continue;
-        }
-        const isVideo = file.type.startsWith('video/');
-        if (!file.type.startsWith('image/') && !isVideo) {
-          skippedInvalid++;
-          continue;
-        }
-        const stored = await stashBackground(file);
-        additions.push({
-          id: `media-${stored.id}`,
-          title: file.name,
-          label: isVideo ? 'Video' : 'Image',
-          text: '',
-          kind: 'media',
-          mediaUrl: `local-background:${stored.id}`,
-          mediaType: isVideo ? 'video' : 'image',
-          audioMuted: true,
-        });
-      }
-      if (!additions.length) {
-        setNotice(skippedTooLarge
-          ? 'No files were added. Media files must be 200 MB or smaller.'
-          : 'No supported media files were selected. Choose images, GIFs, MP4, MOV, or WebM files.');
-        return;
-      }
-      const mediaOnlyDeck = mediaDeckSlides.filter((item) => item.kind === 'media' && Boolean(item.mediaUrl));
-      const nextDeck = [...mediaOnlyDeck, ...additions];
-      const itemIndex = nextDeck.length - 1;
-      const lastAdded = additions[additions.length - 1]!;
-      setSlides(nextDeck);
-      setMediaDeckSlides(nextDeck);
-      setSelected(itemIndex);
-      setSelectedMediaDeckIdx(itemIndex);
-      loadPreview(lastAdded);
-      if (autoPush) broadcast(lastAdded);
-      setIsDirty(true);
-      const skipped = skippedTooLarge + skippedInvalid;
-      const skippedMessage = skipped ? ` ${skipped} unsupported or oversized file(s) skipped.` : '';
-      setNotice(`Added ${additions.length} media item${additions.length === 1 ? '' : 's'} to the presentation deck.${skippedMessage}`);
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Could not save this media file.');
-    }
   }
 
   function youtubeEmbedUrl(input: string): string | null {
@@ -522,6 +468,7 @@ export function Studio() {
   const [recentSchedules, setRecentSchedules] = useState<
     Array<{ id: string; name: string; savedAt: string; payload: any }>
   >([]);
+  const [activeScheduleMedia, setActiveScheduleMedia] = useState<ScheduleMediaSnapshot>();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load recent schedules from local storage on mount
@@ -556,12 +503,21 @@ export function Studio() {
       scheduledSongs.push(song);
     }
     const activeScheduledSong = scheduledSongs.find((item) => item.title === song.title && item.kind === song.kind) ?? null;
+    let mediaSnapshot: Awaited<ReturnType<typeof createScheduleMediaSnapshot>>;
+    try {
+      mediaSnapshot = await createScheduleMediaSnapshot(mediaDeckSlides, activeScheduleMedia);
+    } catch (error) {
+      console.error('Could not snapshot schedule media references.', error);
+      setNotice(`Could not save schedule media references: ${error instanceof Error ? error.message : String(error)}`);
+      return;
+    }
     const payload = parseSchedulePayload({
       version: '1.0',
       timestamp: new Date().toISOString(),
       name: currentScheduleName,
       slides: slides.filter((slide) => slide.kind !== 'media' || slide.mediaType === 'youtube'),
-      mediaDeckSlides: mediaDeckSlides.filter((slide) => slide.kind !== 'media' || slide.mediaType === 'youtube'),
+      mediaDeckSlides: mediaSnapshot.slides.filter((slide) => slide.kind !== 'media' || slide.mediaType === 'youtube' || slide.mediaUrl?.startsWith('local-background:')),
+      mediaLibrary: mediaSnapshot.mediaLibrary,
       song: activeScheduledSong,
       songs: scheduledSongs,
       scriptureBackground,
@@ -570,6 +526,7 @@ export function Studio() {
       scriptureBackgroundType,
       backgroundDim,
     });
+    setActiveScheduleMedia(mediaSnapshot.mediaLibrary);
 
     const jsonString = serializeSchedulePayload(payload);
 
@@ -658,6 +615,7 @@ export function Studio() {
       name,
       slides: [] as Slide[],
       mediaDeckSlides: [] as Slide[],
+      mediaLibrary: { media: [], albums: [] },
       song: null,
       songs: [] as Song[],
       scriptureBackground,
@@ -687,6 +645,7 @@ export function Studio() {
     setCurrentScheduleName(name);
     setSlides([]);
     setMediaDeckSlides([]);
+    setActiveScheduleMedia(payload.mediaLibrary);
     setSelected(0);
     setSelectedMediaDeckIdx(null);
     setLyrics('');
@@ -713,6 +672,15 @@ export function Studio() {
     const scheduleDeck = payload.mediaDeckSlides;
     setSlides(scheduleSlides);
     setMediaDeckSlides(scheduleDeck);
+    setActiveScheduleMedia(payload.mediaLibrary);
+    if (!payload.mediaLibrary) {
+      void createScheduleMediaSnapshot(scheduleDeck).then((snapshot) => {
+        setActiveScheduleMedia(snapshot.mediaLibrary);
+      }).catch((error) => {
+        console.error('Could not resolve schedule media references.', error);
+        setNotice(`Schedule loaded, but media details could not be resolved: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
     const scheduleSongs = payload.songs;
     const primarySong = payload.song ?? scheduleSongs[0];
     setSong(primarySong ?? { title: '', author: '', tag: '', lyrics: [] });
@@ -734,7 +702,7 @@ export function Studio() {
     setSelectedMediaDeckIdx(0);
     setIsDirty(false);
     rememberSchedule(payload);
-    setNotice(`Loaded schedule "${payload.name}"`);
+    setNotice(`Loaded schedule "${payload.name}". Live projector output was not changed.`);
   }
 
   function handleImportSchedule(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1000,13 +968,40 @@ export function Studio() {
     setVoiceFeedback({ transcript: text, parsed });
   });
   const listening = voice.listening;
-  const activeSlide = mediaDeckSlides[selectedMediaDeckIdx ?? selected] || slides[selected] || slides[0] || welcomeSlide;
+  const activeSlide = (selectedMediaDeckIdx !== null
+    ? mediaDeckSlides[selectedMediaDeckIdx]
+    : slides[selected] ?? mediaDeckSlides[selected]) || slides[0] || welcomeSlide;
   const bookMatches = matchingBooks(book);
 
   // Take slide live directly
   const broadcast = useCallback((slide: Slide) => {
     setOutput({ slide, mode: 'normal', transitionMode });
   }, [transitionMode]);
+
+  function presentMediaSelection(additions: Slide[], title: string, type: 'media' | 'album') {
+    const prepared = prepareMediaDeck(mediaDeckSlides, additions, type, slides);
+    const target = prepared.deck[prepared.selectedIndex];
+    if (!target) {
+      setNotice(`"${title}" does not contain any available media.`);
+      return;
+    }
+
+    if (prepared.clearOtherDeck) {
+      setSlides([]);
+      setSelected(0);
+    }
+    setMediaDeckSlides(prepared.deck);
+    setSelected(prepared.selectedIndex);
+    setSelectedMediaDeckIdx(prepared.selectedIndex);
+    setActiveFocus('deck');
+    setEditingSlideIdx(null);
+    setStorePreview(target);
+    broadcast(target);
+    setIsDirty(true);
+    setNotice(type === 'album'
+      ? `Presented "${title}" from the beginning in its saved order.`
+      : `Presented "${target.title}"${prepared.clearOtherDeck ? '' : ' and kept the other standalone media in the deck'}.`);
+  }
   // Auto-fallback: Switch away from word blur if active slide is scripture
 
   // Sync active presentation deck card scroll into view smoothly
@@ -2704,18 +2699,31 @@ export function Studio() {
                       ))}
                     </div>
                   </div>
-                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex flex-col gap-2">
-                    <SectionLabel icon={<ImageIcon size={14} />}>ADD STANDALONE MEDIA</SectionLabel>
-                    <p className="text-[11px] text-slate-400">Select multiple images or videos to add them as separate deck slides. Each file is limited to 200 MB.</p>
-                    <input ref={standaloneMediaInputRef} type="file" accept="image/*,video/mp4,video/quicktime,video/webm" multiple className="hidden" onChange={handleStandaloneMediaUpload} />
-                    <Button className="media-upload-button w-full h-9 font-bold text-xs" onClick={() => standaloneMediaInputRef.current?.click()}>
-                      <Upload size={14} className="mr-1.5" /> Upload Media
-                    </Button>
+                  <MediaLibrary
+                    onPresentSelection={presentMediaSelection}
+                    scheduleMedia={activeScheduleMedia}
+                    onResolveMissingMedia={async (item, file) => {
+                      await replaceMediaFile(item, file);
+                      setMediaDeckSlides((current) => current.map((slide) => (
+                        slide.mediaUrl === `local-background:${item.id}`
+                          ? { ...slide, mediaRevision: Date.now() }
+                          : slide
+                      )));
+                      setActiveScheduleMedia((current) => current ? {
+                        ...current,
+                        media: current.media.map((saved) => saved.id === item.id
+                          ? { ...saved, mimeType: file.type, size: file.size }
+                          : saved),
+                      } : current);
+                      setIsDirty(true);
+                    }}
+                  />
+                  <div className="rounded-lg border border-white/10 bg-black/10 p-3 flex flex-col gap-2">
+                    <SectionLabel icon={<Link2 size={14} />}>ONLINE MEDIA</SectionLabel>
                     <div className="flex gap-2">
                       <input aria-label="YouTube URL" value={youtubeMediaUrl} onChange={(e) => setYoutubeMediaUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addYoutubeMedia(); } }} placeholder="Paste YouTube / live URL" className="min-w-0 flex-1 h-9 rounded-md border border-white/15 bg-black/40 px-2 text-xs text-white outline-none focus:border-primary" />
-                    <Button aria-label="Add YouTube media" title="Add YouTube media" className="accent-action h-9 px-3" onClick={addYoutubeMedia}><Link2 size={14} /></Button>
+                      <Button aria-label="Add YouTube media" title="Add YouTube media to deck" className="accent-action h-9 px-3" onClick={addYoutubeMedia}><Link2 size={14} /></Button>
                     </div>
-                    <div className="text-[10px] text-slate-400">{mediaDeckSlides.filter((item) => item.kind === 'media' && item.mediaUrl).length} standalone media item(s) in deck</div>
                     <Button variant="outline" className="accent-action w-full h-9 text-xs" onClick={() => setIsMediaExplorerOpen(true)}>
                       <ImageIcon size={14} className="mr-1.5" /> Choose Local Stills & Motion Loops
                     </Button>
@@ -2876,9 +2884,16 @@ export function Studio() {
                         )}
                       </div>
 
-                      <p className="text-[11px] line-clamp-3 leading-snug my-1">
-                        {slideItem.text || '[Blank / Background Frame]'}
-                      </p>
+                      {slideItem.kind === 'media' && slideItem.mediaUrl ? (
+                        <div className="my-1 flex min-h-0 flex-1 flex-col gap-1">
+                          <DeckMediaThumbnail slide={slideItem} />
+                          <p className="truncate text-[10px] leading-tight text-slate-200" title={slideItem.title}>{slideItem.title}</p>
+                        </div>
+                      ) : (
+                        <p className="text-[11px] line-clamp-3 leading-snug my-1">
+                          {slideItem.text || '[Blank / Background Frame]'}
+                        </p>
+                      )}
                     </div>
                   );
                 })}
@@ -2949,7 +2964,7 @@ export function Studio() {
                 </div>
 
                 <div className="monitor-screen-wrap flex-1 flex items-center justify-center bg-black/60 rounded-md overflow-hidden p-1">
-                  <SlideScreen slide={activeSlide} preview transitionMode={transitionMode} backgroundDim={backgroundDim} />
+                  <SlideScreen slide={activeSlide} preview transitionMode={transitionMode} backgroundDim={backgroundDim} mediaRevision={activeSlide.mediaRevision ?? 0} />
                 </div>
 
                 <div className="monitor-footer py-1 px-1 flex items-center justify-between mt-2">
@@ -3015,7 +3030,7 @@ export function Studio() {
                 </div>
 
                 <div className="monitor-screen-wrap flex-1 flex items-center justify-center bg-black/60 rounded-md overflow-hidden p-1">
-                  <SlideScreen slide={output.slide} mode={output.mode} transitionMode={output.transitionMode ?? transitionMode} backgroundDim={output.backgroundDim ?? backgroundDim} />
+                  <SlideScreen slide={output.slide} mode={output.mode} transitionMode={output.transitionMode ?? transitionMode} backgroundDim={output.backgroundDim ?? backgroundDim} mediaRevision={output.slide.mediaRevision ?? 0} />
                 </div>
 
                 <div className="monitor-footer py-1 px-1 flex items-center justify-between mt-2">
@@ -3344,7 +3359,7 @@ export function Projector() {
 
   return (
     <div className="projector-view" style={{ '--primary': projectorAccentColors[accentTheme] } as CSSProperties}>
-      <SlideScreen slide={output.slide} mode={output.mode} transitionMode={output.transitionMode ?? "blur-words"} backgroundDim={output.backgroundDim ?? 50} />
+      <SlideScreen slide={output.slide} mode={output.mode} transitionMode={output.transitionMode ?? "blur-words"} backgroundDim={output.backgroundDim ?? 50} mediaRevision={output.slide.mediaRevision ?? 0} />
       <Button
         variant="ghost"
         size="icon"
