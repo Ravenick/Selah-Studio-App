@@ -198,6 +198,8 @@ export async function stashBackground(file: File): Promise<StoredBackground> {
   return item;
 }
 
+const backgroundUrlCache = new Map<string, Promise<string | undefined>>();
+
 export async function getBackgroundBlob(id: string): Promise<Blob | undefined> {
   const item = await workspaceDb.backgrounds.get(id);
   if (!item) return undefined;
@@ -215,6 +217,16 @@ export async function getBackgroundBlob(id: string): Promise<Blob | undefined> {
     : extension === 'webm' ? 'video/webm'
     : 'video/mp4');
   return new Blob([buffer], { type: mime });
+}
+
+export function getBackgroundObjectUrl(id: string): Promise<string | undefined> {
+  const cached = backgroundUrlCache.get(id);
+  if (cached) return cached;
+
+  const request = getBackgroundBlob(id).then((blob) => blob ? URL.createObjectURL(blob) : undefined);
+  backgroundUrlCache.set(id, request);
+  void request.catch(() => backgroundUrlCache.delete(id));
+  return request;
 }
 
 export type CachedPassage = {

@@ -7,7 +7,7 @@ import { parseSections, sectionHeadings, type SongSection } from '@/lib/studio-w
 import type { HeaderStyle, Slide, Song } from '@/lib/studio-data';
 import { SelectionEditor } from './selection-editor';
 import { SlideScreen } from './slide-screen';
-import { PRESENTATION_COLORS, type PresentationFont } from '@/lib/scripture-appearance';
+import { PRESENTATION_COLORS, type PresentationFont } from '@/lib/presentation-style';
 import type { TextFormat } from '@/lib/presentation';
 
 const defaultHeaderStyle: HeaderStyle = { weight: '700', size: 100, color: '#ffffff', font: 'font-montserrat', showMarker: true };
@@ -267,6 +267,7 @@ export function SongBuilder({ onClose, onApply, onSave, mode = 'song', initialSo
         <div id="song-section-panel" role="tabpanel" aria-labelledby={`song-section-${active}`} className="builder-slide-preview style-preview-screen">
           <SlideScreen
             className="builder-slide-screen"
+            preview
             backgroundDim={55}
             slide={{
               id: `builder-preview-${active}`,

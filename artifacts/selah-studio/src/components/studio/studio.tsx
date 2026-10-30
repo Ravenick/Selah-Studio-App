@@ -91,7 +91,6 @@ import {
   type SequenceVerseItem,
 } from '@/lib/offline-bible';
 import { parseSpokenBibleReference, type ParsedSpokenReference } from '@/lib/spoken-bible-parser';
-import { PRESENTATION_COLORS, saveScriptureAppearance, useScriptureAppearance } from '@/lib/scripture-appearance';
 
 import { invoke, isTauri } from '@tauri-apps/api/core';
 
@@ -788,7 +787,6 @@ export function Studio() {
   const scriptureSearchInputRef = useRef<HTMLInputElement>(null);
   const scriptureSearchRequest = useRef(0);
   const [selectedTranslation, setSelectedTranslation] = useState<string>('KJV');
-  const scriptureAppearance = useScriptureAppearance();
   const scriptureRequestId = useRef(0);
   const sequenceRequestId = useRef(0);
 
@@ -2391,31 +2389,7 @@ export function Studio() {
                     ))}
                   </div>
 
-                  <details className="scripture-appearance-panel">
-                    <summary>Scripture text style</summary>
-                    <div className="scripture-appearance-controls">
-                      <label>
-                        Font
-                        <select
-                          value={scriptureAppearance.font}
-                          onChange={(event) => saveScriptureAppearance({ ...scriptureAppearance, font: event.target.value as typeof scriptureAppearance.font })}
-                        >
-                          <option value="font-montserrat">Montserrat</option>
-                          <option value="font-bebas-neue">Bebas Neue</option>
-                          <option value="font-dm">DM Sans</option>
-                          <option value="font-georgia">Georgia</option>
-                          <option value="font-mono">Monospace</option>
-                        </select>
-                      </label>
-                      <label>
-                        Verse color
-                        <div className="scripture-color-grid" role="group" aria-label="Scripture text color palette">
-                          {PRESENTATION_COLORS.map((color) => <button key={color} type="button" className={scriptureAppearance.textColor.toLowerCase() === color ? 'selected' : ''} style={{ backgroundColor: color, filter: `drop-shadow(0 0 3px ${color}66)` }} aria-label={`Scripture text color ${color}`} aria-pressed={scriptureAppearance.textColor.toLowerCase() === color} title={color} onClick={() => saveScriptureAppearance({ ...scriptureAppearance, textColor: color })} />)}
-                        </div>
-                      </label>
-                    </div>
-                  </details>
-                  {lookupError && <p className="scripture-appearance-error" role="alert">{lookupError}</p>}
+                  {lookupError && <p className="scripture-lookup-error" role="alert">{lookupError}</p>}
 
                   <div className="scripture-search-wrap">
                     <label className="search-input">
@@ -2965,7 +2939,7 @@ export function Studio() {
                 </div>
 
                 <div className="monitor-screen-wrap flex-1 flex items-center justify-center bg-black/60 rounded-md overflow-hidden p-1">
-                  <SlideScreen slide={activeSlide} transitionMode={transitionMode} backgroundDim={backgroundDim} />
+                  <SlideScreen slide={activeSlide} preview transitionMode={transitionMode} backgroundDim={backgroundDim} />
                 </div>
 
                 <div className="monitor-footer py-1 px-1 flex items-center justify-between mt-2">

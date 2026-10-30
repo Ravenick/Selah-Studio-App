@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Paintbrush, Type } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { TextFormat } from '@/lib/presentation';
-import { PRESENTATION_COLORS, type PresentationFont } from '@/lib/scripture-appearance';
+import { PRESENTATION_COLORS, type PresentationFont } from '@/lib/presentation-style';
 
 const fonts: Array<{ value: PresentationFont; label: string }> = [
   { value: 'font-bebas-neue', label: 'Bebas Neue' },

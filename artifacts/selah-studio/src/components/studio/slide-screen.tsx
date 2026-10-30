@@ -1,11 +1,10 @@
 import React from 'react';
 import { cloneElement, isValidElement, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type ReactElement } from 'react';
-import { getBackgroundBlob } from '@/lib/local-workspace';
+import { getBackgroundObjectUrl } from '@/lib/local-workspace';
 import type { Slide } from '@/lib/studio-data';
 import { createStartupOutput, welcomeSlide, type OutputState } from '@/lib/projector-state';
 import { useFitText } from '@/hooks/use-fit-text';
 import { FormattedText } from './formatted-text';
-import { useScriptureAppearance } from '@/lib/scripture-appearance';
 
 export { createStartupOutput, welcomeSlide, type OutputState } from '@/lib/projector-state';
 
@@ -173,12 +172,14 @@ export function SlideScreen({
   transitionMode = 'fade',
   className = '',
   backgroundDim = 50,
+  preview = false,
 }: {
   slide: Slide;
   mode?: 'normal' | 'blackout' | 'clear' | 'logo';
   transitionMode?: 'cold' | 'fade' | string;
   className?: string;
   backgroundDim?: number;
+  preview?: boolean;
 }) {
   // 1. Safe transition class definition (Fixes 'stageClass is not defined')
   const stageClass = transitionMode === 'cold' ? 'selah-transition-cold' : 'selah-transition-fade';
@@ -191,8 +192,7 @@ export function SlideScreen({
   const headingRef = useRef<HTMLElement>(null);
   const textBoundaryRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLParagraphElement>(null);
-  const scriptureAppearance = useScriptureAppearance();
-  const audioMuted = slide.audioMuted ?? true;
+  const audioMuted = preview || (slide.audioMuted ?? true);
   const headerColors: Record<string, string> = { white: 'var(--screen-text)', teal: 'var(--primary)', gold: 'var(--gold)', rose: '#fb7185' };
   const headerFonts: Record<string, string> = {
     'font-dm': 'inherit',
@@ -204,27 +204,23 @@ export function SlideScreen({
 
   useEffect(() => {
     let alive = true;
-    let objectUrl = '';
     const source = slide.background;
     if (!isLocalAsset(source)) {
       setResolvedBackground('');
       return;
     }
-    void getBackgroundBlob(source!.slice('local-background:'.length)).then((blob) => {
-      if (alive && blob) {
-        objectUrl = URL.createObjectURL(blob);
-        setResolvedBackground(objectUrl);
+    void getBackgroundObjectUrl(source!.slice('local-background:'.length)).then((url) => {
+      if (alive && url) {
+        setResolvedBackground(url);
       }
     }).catch(() => undefined);
     return () => {
       alive = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [slide.background]);
 
   useEffect(() => {
     let alive = true;
-    let objectUrl = '';
     const source = slide.mediaUrl;
     if (!isLocalAsset(source)) {
       setResolvedMedia(source || '');
@@ -233,10 +229,9 @@ export function SlideScreen({
     }
     setResolvedMedia('');
     setMediaError('');
-    void getBackgroundBlob(source!.slice('local-background:'.length)).then((blob) => {
-      if (alive && blob) {
-        objectUrl = URL.createObjectURL(blob);
-        setResolvedMedia(objectUrl);
+    void getBackgroundObjectUrl(source!.slice('local-background:'.length)).then((url) => {
+      if (alive && url) {
+        setResolvedMedia(url);
       } else if (alive) {
         setMediaError('This local media file could not be opened.');
       }
@@ -245,7 +240,6 @@ export function SlideScreen({
     });
     return () => {
       alive = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [slide.mediaUrl]);
 
@@ -266,7 +260,7 @@ export function SlideScreen({
     boundaryRef: textBoundaryRef,
     contentRef: textRef,
     enabled: !isStandaloneMedia && mode === 'normal',
-    contentKey: `${slide.id}|${slide.kind}|${scriptureAppearance.font}|${slide.heading ?? ''}|${slide.text}|${JSON.stringify(slide.formats ?? [])}|${JSON.stringify(slide.verses ?? [])}`,
+    contentKey: `${slide.id}|${slide.kind}|${slide.heading ?? ''}|${slide.text}|${JSON.stringify(slide.formats ?? [])}|${JSON.stringify(slide.verses ?? [])}`,
   });
 
   // A verse/chorus marker follows the actual wrapped text block. Short lyrics
@@ -305,7 +299,7 @@ export function SlideScreen({
   }, [fittedFontSize, slide.heading, slide.text, slide.verses]);
 
   return (
-    <div className={`slide-screen ${slide.kind === 'scripture' ? 'scripture-screen' : ''} ${slide.kind === 'song' || slide.kind === 'sermon' ? 'song-screen' : ''} ${slide.verses ? 'compiled-scripture' : ''} ${slide.chorus ? 'chorus-screen' : ''} ${mode === 'blackout' ? 'screen-blackout' : ''} ${isStandaloneMedia ? 'standalone-media-screen' : ''} ${className}`} style={{ '--scripture-font': headerFonts[scriptureAppearance.font] ?? 'ui-monospace, monospace', '--scripture-text-color': scriptureAppearance.textColor } as React.CSSProperties}>
+    <div className={`slide-screen ${slide.kind === 'scripture' ? 'scripture-screen' : ''} ${slide.kind === 'song' || slide.kind === 'sermon' ? 'song-screen' : ''} ${slide.chorus ? 'chorus-screen' : ''} ${mode === 'blackout' ? 'screen-blackout' : ''} ${isStandaloneMedia ? 'standalone-media-screen' : ''} ${className}`}>
       <style>{transitionStyles}</style>
       {mode !== 'blackout' && isStandaloneMedia && (
         <div className="standalone-media-stage">
@@ -322,16 +316,16 @@ export function SlideScreen({
               />
             ) : <div className="standalone-media-error">Loading YouTube video…</div>
           ) : slide.mediaType === 'video' ? (
-            resolvedMedia ? <video src={resolvedMedia} className="standalone-media-content" autoPlay loop playsInline controls muted={audioMuted} onError={() => setMediaError('This video could not be played on the projector.')} /> : <div className="standalone-media-error">{mediaError || 'Loading video…'}</div>
+            resolvedMedia ? <video src={resolvedMedia} className="standalone-media-content" autoPlay loop playsInline preload="auto" controls muted={audioMuted} onError={() => setMediaError('This video could not be played on the projector.')} /> : <div className="standalone-media-error">{mediaError}</div>
           ) : (
-            resolvedMedia ? <img src={resolvedMedia} className="standalone-media-content" alt={slide.title || 'Presentation media'} onError={() => setMediaError('This image could not be displayed on the projector.')} /> : <div className="standalone-media-error">{mediaError || 'Loading image…'}</div>
+            resolvedMedia ? <img src={resolvedMedia} className="standalone-media-content" alt={slide.title || 'Presentation media'} onError={() => setMediaError('This image could not be displayed on the projector.')} /> : <div className="standalone-media-error">{mediaError}</div>
           )}
         </div>
       )}
       {!isStandaloneMedia && mode !== 'blackout' && (
         <>
           {isBackgroundVideo && hasBackground ? (
-            <video src={background} className="screen-background" autoPlay muted loop playsInline />
+            <video src={background} className="screen-background" autoPlay muted loop playsInline preload="auto" />
           ) : (
             <img src={hasBackground && (background?.startsWith('blob:') || background?.startsWith('https:') || background?.startsWith('/')) ? background : mountain.url} alt="" width={1536} height={864} className={`screen-background ${slide.background?.startsWith('tone-') ? slide.background : ''}`} />
           )}
