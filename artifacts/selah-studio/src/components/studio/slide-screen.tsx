@@ -250,7 +250,7 @@ export function SlideScreen({
     frame.contentWindow.postMessage(JSON.stringify({ event: 'command', func: audioMuted ? 'mute' : 'unMute', args: [] }), '*');
   }, [audioMuted, resolvedMedia, slide.id, slide.mediaType]);
 
-  const background = resolvedBackground || slide.background || (slide.kind === 'scripture' ? '/backgrounds/stills/Echo Spheres Party - 16x9.jpg' : undefined);
+  const background = resolvedBackground || slide.background || (slide.kind === 'scripture' ? '/backgrounds/stills/Red Particles.jpg' : undefined);
   const hasBackground = Boolean(background && !isLocalAsset(background));
   const isBackgroundVideo = slide.backgroundType === 'video' || Boolean(background && /\.(mp4|webm|mov)(\?|$)/i.test(background));
   const isStandaloneMedia = slide.kind === 'media' && Boolean(slide.mediaUrl);
@@ -356,16 +356,16 @@ export function SlideScreen({
           <div ref={textBoundaryRef} className="slide-text-boundary">
           <p
             ref={textRef}
+            className={slide.kind === 'scripture' ? 'scripture-copy-text' : undefined}
             style={{
               fontSize: `${fittedFontSize}px`,
-              ...(slide.kind === 'scripture' ? { fontWeight: 900, WebkitTextStroke: '.3px currentColor' } : {}),
             }}
           >
             {slide.verses ? (
               slide.verses.map((verse, i) => (
                 <span className="scripture-verse" key={i}>
-                  <sup>──{verse.number}──</sup>
-                  {verse.text}{' '}
+                  <span className="scripture-verse-number">{verse.number}</span>
+                  <span className="scripture-copy-words">{verse.text}{' '}</span>
                 </span>
               ))
             ) : (

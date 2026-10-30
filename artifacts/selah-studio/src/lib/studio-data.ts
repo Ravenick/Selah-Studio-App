@@ -77,9 +77,9 @@ const ALL_MOTIONS: Omit<MediaAsset, 'target'>[] = [
 
 export const SCRIPTURE_BACKGROUNDS: MediaAsset[] = [
   {
-    id: 'scripture-echo-spheres-party',
-    title: 'Echo Spheres Party',
-    url: "/backgrounds/stills/Echo Spheres Party - 16x9.jpg",
+    id: 'scripture-red-particles',
+    title: 'Red Particles',
+    url: '/backgrounds/stills/Red Particles.jpg',
     type: 'image',
     target: 'scripture',
   },

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import {
   chapters,
   initialTimeline,
@@ -167,6 +167,11 @@ const accents: [string, string][] = [
   ['gold', 'Holy Gold'],
   ['purple', 'Deep Purple'],
 ];
+const projectorAccentColors = {
+  teal: '#54bba3',
+  gold: '#c7a663',
+  purple: 'oklch(0.67 0.17 298)',
+} as const;
 
 
 const initialScripture: Slide = {
@@ -774,7 +779,7 @@ export function Studio() {
 
   // Background Selection
   // Default Constant Backgrounds
-  const [scriptureBackground, setScriptureBackground] = useState('/backgrounds/stills/Echo Spheres Party - 16x9.jpg');
+  const [scriptureBackground, setScriptureBackground] = useState('/backgrounds/stills/Red Particles.jpg');
   const [scriptureBackgroundType, setScriptureBackgroundType] = useState<'image' | 'video'>('image');
 
 
@@ -1018,15 +1023,17 @@ export function Studio() {
 
   // Sync output to BroadcastChannel & LocalStorage
   useEffect(() => {
-    outputRef.current = output;
+    const accentTheme: OutputState['accentTheme'] = theme === 'gold' || theme === 'purple' ? theme : 'teal';
+    const projectorOutput = { ...output, accentTheme };
+    outputRef.current = projectorOutput;
     setStoreLive(output.slide);
-    postChannelMessage(channel.current, { type: 'output', output });
+    postChannelMessage(channel.current, { type: 'output', output: projectorOutput });
     try {
-      localStorage.setItem('selah-projector-latest', JSON.stringify(output));
+      localStorage.setItem('selah-projector-latest', JSON.stringify(projectorOutput));
     } catch {
       // fallback
     }
-  }, [output, setStoreLive]);
+  }, [output, setStoreLive, theme]);
 
   useEffect(() => {
     setOutput((current) => current.backgroundDim === backgroundDim ? current : { ...current, backgroundDim });
@@ -1055,7 +1062,10 @@ export function Studio() {
         if (cancelled) return;
         setTheme(accent);
         if (preferences.autoPush !== undefined) setAutoPush(preferences.autoPush);
-        if (preferences.scriptureBackground) setScriptureBackground(preferences.scriptureBackground);
+        const scriptureBg = preferences.scriptureBackground === '/backgrounds/stills/Echo Spheres Party - 16x9.jpg'
+          ? '/backgrounds/stills/Red Particles.jpg'
+          : preferences.scriptureBackground;
+        if (scriptureBg) setScriptureBackground(scriptureBg);
         if (preferences.scriptureBackgroundType) setScriptureBackgroundType(preferences.scriptureBackgroundType);
         if (preferences.mediaBackground) setMediaBackground(preferences.mediaBackground);
         if (preferences.mediaBackgroundType) setMediaBackgroundType(preferences.mediaBackgroundType);
@@ -3312,6 +3322,7 @@ export function Studio() {
 
 export function Projector() {
   const [output, setOutput] = useState<OutputState>(createStartupOutput);
+  const accentTheme = output.accentTheme && output.accentTheme in projectorAccentColors ? output.accentTheme : 'teal';
 
   useEffect(() => {
     const bc = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('selah_projector_channel');
@@ -3332,7 +3343,7 @@ export function Projector() {
   }, []);
 
   return (
-    <div className="projector-view">
+    <div className="projector-view" style={{ '--primary': projectorAccentColors[accentTheme] } as CSSProperties}>
       <SlideScreen slide={output.slide} mode={output.mode} transitionMode={output.transitionMode ?? "blur-words"} backgroundDim={output.backgroundDim ?? 50} />
       <Button
         variant="ghost"

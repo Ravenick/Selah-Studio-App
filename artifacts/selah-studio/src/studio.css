@@ -2261,6 +2261,7 @@ h1 {
 }
 
 .projector-view {
+  --primary: #54bba3;
   height: 100vh;
   width: 100vw;
   background: var(--screen-ink);
@@ -4194,11 +4195,13 @@ h1 {
   color: inherit;
 }
 
-.scripture-verse sup {
+.scripture-screen .screen-copy .scripture-verse-number {
+  display: inline;
   color: var(--primary);
   font-size: .62em;
-  font-weight: 600;
-  margin-right: .35em;
+  font-weight: 700;
+  margin-right: .4em;
+  white-space: nowrap;
 }
 
 .scripture-screen .screen-copy .passage-tag {
@@ -5515,7 +5518,7 @@ h1 {
   letter-spacing: -.015em;
 }
 
-.scripture-screen .scripture-verse sup,
+.scripture-screen .scripture-verse-number,
 .scripture-screen .passage-tag {
   color: var(--primary);
 }
@@ -6821,9 +6824,31 @@ h1 {
   font-weight: 800;
 }
 
-.scripture-screen .screen-copy p {
-  font-weight: 900;
-  -webkit-text-stroke: .3px currentColor;
+.scripture-screen .scripture-copy-text {
+  font-weight: 900 !important;
+  -webkit-text-stroke: .65px currentColor;
+}
+
+.scripture-screen .screen-copy .scripture-copy-words {
+  display: inline;
+  margin: 0;
+  font-size: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  font-weight: 900 !important;
+  -webkit-text-stroke: .65px currentColor;
+}
+
+.scripture-screen .scripture-verse-number {
+  -webkit-text-stroke: 0;
+  font-weight: 700 !important;
+}
+
+.scripture-screen .slide-text-boundary {
+  top: 8%;
+  right: 6%;
+  bottom: 10%;
+  left: 6%;
 }
 
 /* Scripture starts higher in the resource panel so the reference controls and

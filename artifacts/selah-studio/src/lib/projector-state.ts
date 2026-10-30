@@ -3,6 +3,7 @@ import type { Slide } from './studio-data';
 export type OutputState = {
   slide: Slide;
   mode: 'normal' | 'blackout' | 'clear' | 'logo';
+  accentTheme?: 'teal' | 'gold' | 'purple';
   transitionMode?: 'cold' | 'fade' | 'blur-words';
   backgroundDim?: number;
 };
