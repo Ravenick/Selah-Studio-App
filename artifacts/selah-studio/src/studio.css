@@ -7523,9 +7523,11 @@ h1 {
 }
 
 .studio-connect-dialog {
-  width: min(810px, calc(100vw - 28px)) !important;
-  max-width: 810px !important;
-  max-height: min(88vh, 900px);
+  box-sizing: border-box !important;
+  width: min(810px, calc(100vw - 24px)) !important;
+  max-width: calc(100vw - 24px) !important;
+  max-height: min(88vh, calc(100dvh - 24px), 900px);
+  min-width: 0;
   overflow: hidden;
   padding: 24px !important;
   border: 1px solid #b2f6d31f !important;
@@ -8028,6 +8030,31 @@ h1 {
   border-color: #f786862b;
   background: #bc414211;
   color: #ffb6b6;
+}
+
+.connect-message.desktop-note {
+  align-items: flex-start;
+  border-color: #77dfaa30;
+  background: linear-gradient(110deg, #163c2a88, #10221b88);
+  color: #d7f4e3;
+}
+
+.connect-message.desktop-note svg {
+  color: #7de6ad;
+}
+
+.connect-message.desktop-note strong,
+.connect-message.desktop-note span {
+  display: block;
+}
+
+.connect-message.desktop-note strong {
+  margin-bottom: 3px;
+  font-size: 11px;
+}
+
+.connect-message.desktop-note span {
+  color: #a7c2b1;
 }
 
 .connect-message.success {

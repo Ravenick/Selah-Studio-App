@@ -10,6 +10,7 @@ import {
   Clock3,
   FileText,
   LoaderCircle,
+  Monitor,
   Music2,
   Radio,
   RefreshCw,
@@ -308,7 +309,13 @@ export function StudioConnect({ onApprove }: Props) {
           </div>
 
           {!isTauri() && (
-            <div className="connect-message error"><AlertTriangle size={15} /> Wi-Fi Connect is available in the Tauri desktop app. The web version does not start a local network service.</div>
+            <div className="connect-message desktop-note" role="note">
+              <Monitor size={16} />
+              <div>
+                <strong>Studio Connect needs the desktop app</strong>
+                <span>Only the desktop app can host the private Wi-Fi service. Open Selah Studio on your studio computer to start sharing; nearby devices can then submit from their browser, even without internet.</span>
+              </div>
+            </div>
           )}
           {error && <div className="connect-message error" role="alert"><AlertTriangle size={15} />{error}</div>}
           {notice && <div className="connect-message success" role="status"><CheckCircle2 size={15} />{notice}</div>}
@@ -321,7 +328,7 @@ export function StudioConnect({ onApprove }: Props) {
                   <strong>{status.running ? 'Sharing is active' : 'Wi-Fi sharing is off'}</strong>
                   <span>{status.running ? 'The local submission page is ready for your team.' : 'Start a temporary, private sharing session.'}</span>
                 </div>
-                <Button size="sm" variant={status.running ? 'outline' : 'default'} disabled={busy || !isTauri()} onClick={() => void (status.running ? stopSharing() : startSharing())}>
+                <Button size="sm" variant={status.running ? 'outline' : 'default'} disabled={busy || !isTauri()} title={!isTauri() ? 'Available in the Selah Studio desktop app' : undefined} onClick={() => void (status.running ? stopSharing() : startSharing())}>
                   {busy ? <LoaderCircle size={14} className="animate-spin" /> : status.running ? <X size={14} /> : <Wifi size={14} />}
                   {status.running ? 'Stop sharing' : 'Start sharing'}
                 </Button>
