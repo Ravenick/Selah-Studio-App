@@ -94,6 +94,7 @@ import {
 } from '@/lib/offline-bible';
 import { parseSpokenBibleReference, type ParsedSpokenReference } from '@/lib/spoken-bible-parser';
 import { DeckMediaThumbnail, MediaLibrary } from './media-library';
+import { StudioConnect, type IncomingSubmission } from './studio-connect';
 
 import { invoke, isTauri } from '@tauri-apps/api/core';
 
@@ -1401,6 +1402,33 @@ export function Studio() {
     setSavedState('saved');
   }
 
+  async function approveConnectSubmission(submission: IncomingSubmission) {
+    if (librarySongs.some((item) => item.sourceSubmissionId === submission.id)) return;
+    const kind = submission.kind === 'song' ? 'song' : 'sermon';
+    const originalTitle = submission.title.trim();
+    let title = originalTitle;
+    let suffix = 2;
+    while (librarySongs.some((item) => item.kind === kind && item.title === title)) {
+      title = `${originalTitle} (${suffix})`;
+      suffix += 1;
+    }
+    const content = submission.content.replace(/\r\n/g, '\n').trim();
+    const item: Song = {
+      title,
+      author: submission.author || submission.senderName,
+      tag: submission.kind === 'announcement' ? 'Announcement' : 'Studio Connect',
+      kind,
+      lyrics: content.split(/\n\s*\n/).filter(Boolean),
+      ...(kind === 'sermon' ? { sermonText: content } : {}),
+      ...(submission.notes ? { notes: submission.notes } : {}),
+      ...(submission.scriptureReferences
+        ? { scriptureReferences: submission.scriptureReferences.split(/[;,]\s*/).filter(Boolean) }
+        : {}),
+      sourceSubmissionId: submission.id,
+    };
+    await persistSongLibraryItem(item);
+  }
+
   // Delete song permanently from library
   function handleDeleteSong(targetSong: Song, e: React.MouseEvent) {
     e.stopPropagation();
@@ -2101,6 +2129,7 @@ export function Studio() {
             <Action tip="Workspace Settings" variant="ghost" size="icon" onClick={() => setSettings(true)}>
               <Settings2 />
             </Action>
+            <StudioConnect onApprove={approveConnectSubmission} />
             <Button size="sm" variant="outline" className="accent-action h-7 text-xs gap-1 ml-2" onClick={launchProjector}>
               <ExternalLink size={12} /> Projector
             </Button>
@@ -3069,7 +3098,7 @@ export function Studio() {
             <span className="raven-badge" aria-label="Built by Raven">
               <span>Built by Raven</span>
             </span>
-            <span>Selah Studio v1.0</span>
+            <span>Selah Studio v1.0.0</span>
             <Keyboard size={13} />
           </span>
         </footer>

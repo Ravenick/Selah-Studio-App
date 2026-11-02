@@ -24,6 +24,12 @@ The browser database is the Dexie instance in `artifacts/selah-studio/src/lib/lo
 
 Saved songs, sermons, themes, cached scripture, the bundled KJV, and local media remain available offline. A missing non-KJV passage is fetched from API.Bible and added to the local cache. The app does not require `DATABASE_URL`, Postgres, or an account.
 
+### Studio Connect (Tauri desktop)
+
+The desktop app can start a temporary Wi-Fi submission service from **Studio Connect** in the top navigation. It binds to a dynamically selected private LAN address and ephemeral port, displays a QR code with a one-hour pairing token, and serves the sender form directly from the desktop app. Phones and computers must be on the same Wi-Fi network or hotspot; the workflow needs no internet, account, router configuration, or cloud service. The operator can stop sharing at any time to revoke the token, or refresh the address/QR after changing networks.
+
+Received songs, sermons, and announcements are stored as JSON in Selah Studio's local application-data directory, independent of the sharing session. The Incoming panel supports preview, edit, approve, reject, and delete. Approval writes songs and sermons into the existing local library; announcements are tagged in the sermon library. These actions do not change live projector output. The browser/web build does not host Wi-Fi sharing; this feature is available in the Tauri desktop app.
+
 ## Public hymn search
 
 The Songs library searches the bundled `artifacts/selah-studio/public/openhymnal.201406.xml` archive for title, author, or lyric text. Search works offline and only returns entries whose source record explicitly says `copyright: public domain`. Results include the author and full lyrics; Add & Load saves the song to Dexie and stages it in the deck.

@@ -375,31 +375,58 @@ export function SlideScreen({
     const text = textRef.current;
     if (!copy || !marker || !text || !slide.heading) return;
 
+    let active = true;
     let frame = 0;
-    const positionMarker = () => {
+    const positionMarker = (defer = false) => {
+      if (!active) return;
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
+      const measure = () => {
+        if (!active) return;
         const copyRect = copy.getBoundingClientRect();
         const textRect = text.getBoundingClientRect();
-        const markerRect = marker.getBoundingClientRect();
-        if (!copyRect.height || !textRect.height || !markerRect.height) return;
+        const scaleY = copy.offsetHeight ? copyRect.height / copy.offsetHeight : 0;
+        if (!scaleY || !textRect.height || !marker.offsetHeight) return;
 
-        const safeTop = copyRect.height * 0.06;
-        const gap = Math.max(6, copyRect.height * 0.018);
-        const desiredTop = textRect.top - copyRect.top - markerRect.height - gap;
+        const safeTop = copy.offsetHeight * 0.06;
+        const gap = Math.max(6, copy.offsetHeight * 0.018);
+        const textTop = (textRect.top - copyRect.top) / scaleY;
+        const desiredTop = textTop - marker.offsetHeight - gap;
         marker.style.top = `${Math.max(safeTop, desiredTop)}px`;
-      });
+      };
+
+      if (defer) {
+        frame = requestAnimationFrame(measure);
+      } else {
+        measure();
+      }
     };
 
     positionMarker();
-    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(positionMarker);
+    const observer = typeof ResizeObserver === 'undefined'
+      ? undefined
+      : new ResizeObserver(() => positionMarker(true));
     observer?.observe(copy);
+    observer?.observe(marker);
     observer?.observe(text);
+    const onWindowResize = () => positionMarker(true);
+    window.addEventListener('resize', onWindowResize);
+    void document.fonts?.ready.then(() => positionMarker(true));
     return () => {
+      active = false;
       cancelAnimationFrame(frame);
       observer?.disconnect();
+      window.removeEventListener('resize', onWindowResize);
     };
-  }, [fittedFontSize, slide.heading, slide.text, slide.verses]);
+  }, [
+    animationKey,
+    fittedFontSize,
+    slide.heading,
+    slide.headingStyle?.font,
+    slide.headingStyle?.size,
+    slide.headingStyle?.weight,
+    slide.text,
+    slide.verses,
+  ]);
 
   return (
     <div className={`slide-screen ${slide.kind === 'scripture' ? 'scripture-screen' : ''} ${slide.kind === 'song' || slide.kind === 'sermon' ? 'song-screen' : ''} ${slide.chorus ? 'chorus-screen' : ''} ${mode === 'blackout' ? 'screen-blackout' : ''} ${isStandaloneMedia ? 'standalone-media-screen' : ''} ${className}`}>
