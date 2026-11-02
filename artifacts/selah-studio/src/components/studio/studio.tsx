@@ -34,10 +34,13 @@ import {
   Mic,
   Monitor,
   Music2,
+  PanelTop,
   Pause,
   Play,
   Plus,
   Radio,
+  Save,
+  ScanLine,
   Search,
   Settings2,
   ShieldCheck,
@@ -229,9 +232,56 @@ function scriptureParams(book: string, chapter: string, range: string, translati
 }
 
 const guideSteps = [
-  { title: 'Make room for the moment.', copy: 'Start in your resource library. Pick a song, find a scripture, or paste your own lyrics.', icon: Music2 },
-  { title: 'Prepare with confidence.', copy: 'Dual monitors keep you grounded: Preview on the left, live output on the right.', icon: Layers },
-  { title: 'You’re ready to go live.', copy: 'Press Enter to project live. Use F1 (Blackout), F2 (Clear Text), or F3 (Logo) for instant control.', icon: Radio },
+  {
+    title: 'Build your service content.',
+    copy: 'Use the library panes to find a song or sermon, search for a scripture passage, or create content in the song and sermon builder. In the media pane, upload files or organize them into albums.',
+    actions: [
+      'Select a library item and press Enter to load it into the deck.',
+      'For songs, arrange verses and choruses in the builder; sermons are divided into readable slides.',
+      'Save your schedule as you prepare so the service is ready next time.',
+    ],
+    icon: Music2,
+  },
+  {
+    title: 'Prepare the look and order.',
+    copy: 'The deck is your service sequence. Select slides to preview them, use the presentation controls to move through content, and choose backgrounds and styling that suit the moment.',
+    actions: [
+      'Preview is separate from the live projector; loading or editing content does not have to change what the audience sees.',
+      'Use media albums to keep related images and videos together; press Enter on an album to load its saved order.',
+      'Open Workspace Settings to choose a theme and adjust presentation preferences.',
+    ],
+    icon: Layers,
+  },
+  {
+    title: 'Send a slide to the room.',
+    copy: 'Open the projector and move it to the sanctuary display. When the selected content is ready, press Enter or use the live controls to present it.',
+    actions: [
+      'Use Next/Previous to advance the service deck; use the live controls when you want to present a specific slide.',
+      'F1 blacks out the projector, F2 clears text while keeping the background, and F3 shows the church logo.',
+      'The preview and live output are separate so you can prepare the next item without surprising the audience.',
+    ],
+    icon: PanelTop,
+  },
+  {
+    title: 'Save and restore with confidence.',
+    copy: 'Schedules preserve the service content and media arrangement. Loading one restores your workspace without automatically changing the live projector output.',
+    actions: [
+      'Use the schedule controls to create, save, and reopen a service plan.',
+      'Media is referenced from your local library; keep the original files available on this computer.',
+      'Review restored content in preview, then present it explicitly when you are ready.',
+    ],
+    icon: Save,
+  },
+  {
+    title: 'Receive content from your team.',
+    copy: 'Studio Connect lets nearby people send songs, sermons, and announcements to the studio over local Wi-Fi. The desktop app hosts the service; senders need no account or internet.',
+    actions: [
+      'Open Studio Connect, start sharing, then let senders scan the QR code or enter its local address.',
+      'Their phone must be on the same Wi-Fi or hotspot as the studio computer.',
+      'Review incoming items and approve them into your existing library; approval does not present them live.',
+    ],
+    icon: ScanLine,
+  },
 ];
 
 function LibraryVideoThumb({ src, isScrolling }: { src: string; isScrolling: boolean }) {
@@ -3345,15 +3395,21 @@ export function Studio() {
             <SheetHeader>
               <img src={logo.url} width={64} height={64} alt="Selah" />
               <SheetTitle>Welcome to Selah Studio</SheetTitle>
-              <SheetDescription>Calm, distraction-free sanctuary control.</SheetDescription>
+              <SheetDescription>A practical walkthrough for preparing, presenting, and receiving content.</SheetDescription>
             </SheetHeader>
             <div className="guide-step">
               <span className="guide-step-icon">
-                {guideStep === 0 ? <Music2 size={32} /> : guideStep === 1 ? <Layers size={32} /> : <Radio size={32} />}
+                {(() => {
+                  const Icon = guideSteps[guideStep]?.icon ?? Music2;
+                  return <Icon size={28} />;
+                })()}
               </span>
-              <span className="eyebrow">OPERATOR GUIDE | {guideStep + 1} OF 3</span>
+              <span className="eyebrow">OPERATOR GUIDE | {guideStep + 1} OF {guideSteps.length}</span>
               <h3>{guideSteps[guideStep]?.title}</h3>
               <p>{guideSteps[guideStep]?.copy}</p>
+              <ul>
+                {guideSteps[guideStep]?.actions.map((action) => <li key={action}>{action}</li>)}
+              </ul>
             </div>
             <div className="guide-progress">
               {guideSteps.map((_, i) => (
@@ -3364,8 +3420,8 @@ export function Studio() {
               <Button variant="ghost" disabled={guideStep === 0} onClick={() => setGuideStep(guideStep - 1)}>
                 <ArrowLeft size={14} /> Back
               </Button>
-              <Button onClick={() => (guideStep < 2 ? setGuideStep(guideStep + 1) : setGuide(false))}>
-                {guideStep === 2 ? 'Start Service' : 'Next'} <ArrowRight size={14} />
+              <Button onClick={() => (guideStep < guideSteps.length - 1 ? setGuideStep(guideStep + 1) : setGuide(false))}>
+                {guideStep === guideSteps.length - 1 ? 'Start Service' : 'Next'} <ArrowRight size={14} />
               </Button>
             </div>
           </SheetContent>

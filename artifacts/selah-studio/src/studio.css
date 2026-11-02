@@ -2088,6 +2088,25 @@ h1 {
   overflow-y: auto;
 }
 
+.guide-sheet {
+  isolation: isolate;
+  border-color: color-mix(in oklab, var(--primary) 22%, transparent);
+  background:
+    radial-gradient(ellipse at 10% 5%, color-mix(in oklab, var(--primary) 11%, transparent), transparent 48%),
+    linear-gradient(155deg, color-mix(in oklab, var(--surface-raised) 85%, transparent), color-mix(in oklab, var(--surface) 92%, transparent)) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(135%);
+  backdrop-filter: blur(28px) saturate(135%);
+  box-shadow: -24px 0 80px rgb(0 0 0 / .32), inset 1px 0 color-mix(in oklab, white 7%, transparent);
+}
+
+.guide-sheet>div,
+.guide-sheet>.guide-step,
+.guide-sheet>.guide-progress,
+.guide-sheet>.guide-nav {
+  position: relative;
+  z-index: 1;
+}
+
 .settings-sheet h2,
 .guide-sheet h2 {
   font-size: 25px;
@@ -2210,7 +2229,7 @@ h1 {
 }
 
 .guide-step {
-  margin: 50px 0 30px;
+  margin: 30px 0 24px;
 }
 
 .guide-step-icon {
@@ -2222,7 +2241,7 @@ h1 {
   border-radius: 8px;
   color: var(--primary);
   background: color-mix(in oklab, var(--primary) 6%, transparent);
-  margin-bottom: 25px;
+  margin-bottom: 20px;
 }
 
 .guide-step h3 {
@@ -2235,7 +2254,35 @@ h1 {
 .guide-step p {
   font-size: 13px;
   color: var(--muted-foreground);
-  line-height: 1.9;
+  line-height: 1.7;
+}
+
+.guide-step ul {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guide-step li {
+  position: relative;
+  padding-left: 18px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.guide-step li::before {
+  position: absolute;
+  top: .58em;
+  left: 1px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 10px color-mix(in oklab, var(--primary) 55%, transparent);
+  content: '';
 }
 
 .guide-progress {
@@ -2258,6 +2305,8 @@ h1 {
   display: flex;
   justify-content: space-between;
   margin-top: 30px;
+  padding-top: 16px;
+  border-top: 1px solid color-mix(in oklab, var(--border) 75%, transparent);
 }
 
 .projector-view {
