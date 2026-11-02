@@ -7522,12 +7522,21 @@ h1 {
   place-items: center;
 }
 
-.studio-connect-dialog {
+.ui-dialog-glass.studio-connect-dialog {
+  position: fixed !important;
+  inset: 0 !important;
+  margin: auto !important;
+  translate: none !important;
   box-sizing: border-box !important;
   width: min(810px, calc(100vw - 24px)) !important;
   max-width: calc(100vw - 24px) !important;
-  max-height: min(88vh, calc(100dvh - 24px), 900px);
+  height: fit-content !important;
+  max-height: min(88vh, calc(100dvh - 24px), 900px) !important;
   min-width: 0;
+  min-height: 0;
+  display: flex !important;
+  flex-direction: column;
+  gap: 12px !important;
   overflow: hidden;
   padding: 24px !important;
   border: 1px solid #b2f6d31f !important;
@@ -7637,10 +7646,17 @@ h1 {
 
 .connect-content,
 .connect-incoming {
-  max-height: calc(88vh - 190px);
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
   overflow: auto;
   scrollbar-color: #345445 #08120f;
   scrollbar-width: thin;
+}
+
+.studio-connect-dialog>.connect-sections,
+.studio-connect-dialog>.connect-message {
+  flex: 0 0 auto;
 }
 
 .connect-status-card {
@@ -8355,8 +8371,8 @@ h1 {
 }
 
 @keyframes connect-dialog-enter {
-  from { opacity: 0; transform: translate(-50%, -48%) scale(.97); filter: blur(4px); }
-  to { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: blur(0); }
+  from { opacity: 0; scale: .97; filter: blur(4px); }
+  to { opacity: 1; scale: 1; filter: blur(0); }
 }
 
 @keyframes connect-card-reveal {
@@ -8365,7 +8381,7 @@ h1 {
 }
 
 @media (max-width: 720px) {
-  .studio-connect-dialog {
+  .ui-dialog-glass.studio-connect-dialog {
     padding: 17px !important;
   }
 

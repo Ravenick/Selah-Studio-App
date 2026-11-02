@@ -17,7 +17,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
-use tauri::{Manager, State as TauriState};
+use tauri::{Emitter, Manager, State as TauriState};
 use tokio::{net::TcpListener, sync::oneshot};
 
 const SESSION_LIFETIME_SECONDS: u64 = 60 * 60;
@@ -482,6 +482,7 @@ const SUBMISSION_PAGE: &str = r##"<!doctype html>
 })();
 </script></body></html>"##;
 
+#[tauri::command]
 async fn start_wifi_sharing(
     app: tauri::AppHandle,
     state: TauriState<'_, SharedState>,
