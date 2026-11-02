@@ -354,6 +354,11 @@ export function StudioConnect({ onApprove }: Props) {
                       <li><span>2</span>Scan the QR code or open the local address above.</li>
                       <li><span>3</span>Choose a submission type and send it for operator review.</li>
                     </ol>
+                    <p className="connect-scanner-hint">
+                      No scanner app? Use your phone camera or offline QR scanner, or open{' '}
+                      <a href="https://selahstudio.vercel.app" target="_blank" rel="noreferrer">selahstudio.vercel.app</a>{' '}
+                      and tap “Scan Studio Connect”. The website scanner needs data to load; the submission itself stays on your local Wi-Fi.
+                    </p>
                     <div className="connect-firewall-note"><ShieldCheck size={14} /> If a device cannot connect, allow Selah Studio on <b>Private networks</b> in Windows Firewall.</div>
                     <Button className="connect-refresh" variant="outline" size="sm" disabled={busy} onClick={() => void refreshAddress()}><RefreshCw size={13} className={busy ? 'animate-spin' : ''} />Refresh address &amp; QR</Button>
                   </div>

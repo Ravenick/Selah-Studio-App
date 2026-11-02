@@ -1413,12 +1413,23 @@ export function Studio() {
       suffix += 1;
     }
     const content = submission.content.replace(/\r\n/g, '\n').trim();
+    const lyrics = content.split(/\n\s*\n/).filter(Boolean);
     const item: Song = {
       title,
       author: submission.author || submission.senderName,
       tag: submission.kind === 'announcement' ? 'Announcement' : 'Studio Connect',
       kind,
-      lyrics: content.split(/\n\s*\n/).filter(Boolean),
+      lyrics,
+      ...(kind === 'song' ? {
+        sections: lyrics.map((text) => ({ text, chorus: false })),
+        headerStyle: {
+          weight: '700' as const,
+          size: 100,
+          color: '#ffffff',
+          font: 'font-montserrat',
+          showMarker: true,
+        },
+      } : {}),
       ...(kind === 'sermon' ? { sermonText: content } : {}),
       ...(submission.notes ? { notes: submission.notes } : {}),
       ...(submission.scriptureReferences

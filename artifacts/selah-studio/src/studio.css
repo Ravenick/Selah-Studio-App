@@ -7760,7 +7760,7 @@ h1 {
   place-items: center;
 }
 
-.connect-qr-frame svg {
+.connect-qr-frame>svg {
   display: block;
   width: 188px;
   height: 188px;
@@ -7778,6 +7778,11 @@ h1 {
   color: #9af0bf;
   box-shadow: 0 2px 8px #0005;
   place-items: center;
+}
+
+.connect-qr-center svg {
+  width: 15px;
+  height: 15px;
 }
 
 .connect-qr-card>strong {
@@ -7925,6 +7930,21 @@ h1 {
 
 .connect-firewall-note b {
   color: #dccc9b;
+}
+
+.connect-scanner-hint {
+  margin: 0 0 10px;
+  color: #a9bdb1;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.connect-scanner-hint a {
+  color: #8de8b3;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: #8de8b355;
+  text-underline-offset: 2px;
 }
 
 .connect-refresh {
@@ -8308,6 +8328,43 @@ h1 {
   line-height: 1.5;
 }
 
+.studio-connect-dialog .connect-eyebrow,
+.studio-connect-dialog .connect-pairing-token>span {
+  font-size: 9px;
+}
+
+.studio-connect-dialog .connect-qr-card>span,
+.studio-connect-dialog .connect-expiry,
+.studio-connect-dialog .connect-pairing-token code,
+.studio-connect-dialog .connect-instructions li,
+.studio-connect-dialog .connect-firewall-note,
+.studio-connect-dialog .connect-metrics>div>span:last-child,
+.studio-connect-dialog .connect-privacy-line,
+.studio-connect-dialog .connect-inbox-summary>div:first-child>span:last-child,
+.studio-connect-dialog .connect-inbox-stats,
+.studio-connect-dialog .connect-submission-meta,
+.studio-connect-dialog .connect-submission-preview,
+.studio-connect-dialog .connect-inbox-empty span {
+  font-size: 10px;
+}
+
+.studio-connect-dialog .connect-address,
+.studio-connect-dialog .connect-filter button,
+.studio-connect-dialog .connect-submission-actions button,
+.studio-connect-dialog .connect-inbox-empty strong {
+  font-size: 11px;
+}
+
+.studio-connect-dialog .connect-submission-type,
+.studio-connect-dialog .connect-submission-status,
+.studio-connect-dialog .connect-submission-preview pre {
+  font-size: 10px;
+}
+
+.studio-connect-dialog .connect-submission-preview pre {
+  font-size: 11px;
+}
+
 .connect-edit-dialog {
   width: min(540px, calc(100vw - 28px)) !important;
   max-height: 86vh;
@@ -8399,7 +8456,7 @@ h1 {
     height: 178px;
   }
 
-  .connect-qr-frame svg {
+  .connect-qr-frame>svg {
     width: 164px;
     height: 164px;
   }

@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
-import { ArrowDown, ArrowRight, AudioLines, BookOpen, Check, Download, Github, Mic2, MonitorPlay, Music2, Palette, Sparkles, Youtube } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import type { IScannerControls } from '@zxing/browser';
+import { ArrowDown, ArrowRight, AudioLines, Camera, Check, Download, Github, Mic2, MonitorPlay, Music2, Palette, ScanLine, Sparkles, Wifi, X, Youtube } from 'lucide-react';
 import { Link } from 'wouter';
 import tauriConfig from '../../src-tauri/tauri.conf.json';
 import '@/landing.css';
@@ -37,12 +38,113 @@ const features = [
     title: 'Prepare with intention. Present with peace.',
     copy: 'Keep scripture, songs, sermons, media, and live output within reach throughout the service.',
   },
+  {
+    icon: Wifi,
+    eyebrow: 'LOCAL · PRIVATE · OFFLINE',
+    title: 'Let your team send it straight to the studio.',
+    copy: 'Studio Connect lets nearby phones submit songs, sermons, and announcements over local Wi-Fi for review. No sender account or internet connection is needed; the studio computer runs the desktop app.',
+  },
 ];
 
-const windowsDownloadUrl = 'https://github.com/Ravenick/Artifacts/releases/download/v1.0.0/Selah.Studio';
+const windowsDownloadUrl = 'https://github.com/Ravenick/Artifacts/releases/download/v1.0.0/Selah-Studio.v1.0.0.exe';
+
+function localStudioAddress(value: string) {
+  try {
+    const url = new URL(value);
+    const octets = url.hostname.split('.').map(Number);
+    const [first, second] = octets;
+    const privateAddress = octets.length === 4
+      && octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)
+      && (
+        first === 10
+        || (first === 172 && second >= 16 && second <= 31)
+        || (first === 192 && second === 168)
+      );
+    if (
+      url.protocol !== 'http:'
+      || !privateAddress
+      || url.pathname !== '/connect'
+      || !/^[a-f0-9]{48}$/i.test(url.searchParams.get('token') ?? '')
+      || url.username
+      || url.password
+    ) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+function LandingQrScanner({ onClose }: { onClose: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [message, setMessage] = useState('Allow camera access, then point it at the Studio Connect QR code.');
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    let active = true;
+    let lastInvalidValue = '';
+    let controls: IScannerControls | undefined;
+
+    void import('@zxing/browser').then(({ BrowserQRCodeReader }) => {
+      if (!active) return undefined;
+      return new BrowserQRCodeReader().decodeFromConstraints(
+        { audio: false, video: { facingMode: { ideal: 'environment' } } },
+        video,
+        (result) => {
+          if (!active || !result) return;
+          const address = localStudioAddress(result.getText());
+          if (!address) {
+            if (result.getText() !== lastInvalidValue) {
+              lastInvalidValue = result.getText();
+              setMessage('That QR code is not a valid Selah Studio local connection. Keep scanning for the Studio Connect code.');
+            }
+            return;
+          }
+          setMessage('Studio Connect found. Opening the local submission page…');
+          controls?.stop();
+          window.location.assign(address);
+        },
+      );
+    }).then((scannerControls) => {
+      if (!scannerControls) return;
+      if (active) controls = scannerControls;
+      else scannerControls.stop();
+    }).catch((reason: unknown) => {
+      if (!active) return;
+      console.error('Could not start the Studio Connect QR scanner.', reason);
+      setMessage('Camera access could not start. Allow camera permission for this website, or use your phone camera/offline QR scanner instead.');
+    });
+
+    return () => {
+      active = false;
+      controls?.stop();
+    };
+  }, []);
+
+  return (
+    <section className="landing-scanner" aria-labelledby="landing-scanner-title">
+      <div className="landing-scanner-copy">
+        <span className="landing-feature-eyebrow">STUDIO CONNECT SCANNER</span>
+        <h2 id="landing-scanner-title">Scan the studio’s QR code.</h2>
+        <p>Keep this page open while connected to the same Wi-Fi as the studio computer. After scanning, your browser will open the private local submission form.</p>
+        <p className="landing-scanner-data-note">This website needs internet/data to load and access your camera. The submission form itself is served locally by the studio computer.</p>
+        <button className="landing-btn-ghost landing-scanner-close" type="button" onClick={onClose}>
+          <X aria-hidden="true" size={16} /> Close scanner
+        </button>
+      </div>
+      <div className="landing-scanner-view">
+        <video ref={videoRef} autoPlay muted playsInline aria-label="Camera view for scanning a Studio Connect QR code" />
+        <span className="landing-scanner-frame" aria-hidden="true" />
+        <p role="status"><Camera aria-hidden="true" size={15} />{message}</p>
+      </div>
+    </section>
+  );
+}
 
 export default function WebHome() {
   const stageRef = useRef<HTMLDivElement>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   useEffect(() => {
     const revealItems = document.querySelectorAll<HTMLElement>('.landing-reveal, .landing-feature');
@@ -110,6 +212,9 @@ export default function WebHome() {
               <Link className="landing-btn-primary" href="/studio">
                 Enter Selah Studio <ArrowRight aria-hidden="true" size={17} />
               </Link>
+              <button className="landing-btn-download landing-scan-action" type="button" onClick={() => setScannerOpen(true)}>
+                <ScanLine aria-hidden="true" size={16} /> Scan Studio Connect
+              </button>
               <a className="landing-btn-download" href={windowsDownloadUrl} target="_blank" rel="noreferrer">
                 <Download aria-hidden="true" size={16} /> Download for Windows <span>{appVersion}</span>
               </a>
@@ -156,6 +261,8 @@ export default function WebHome() {
             </a>
           </div>
         </section>
+
+        {scannerOpen && <LandingQrScanner onClose={() => setScannerOpen(false)} />}
 
         <section className="landing-section" id="the-workspace" aria-labelledby="landing-section-title">
           <div className="landing-section-heading landing-reveal">
