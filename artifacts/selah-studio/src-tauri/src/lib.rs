@@ -119,6 +119,7 @@ struct ConnectData {
     active_transfers: usize,
     failed_submissions: usize,
     camera_frame: Option<(Vec<u8>, u64)>,
+    hdmi_camera_frame: Option<(Vec<u8>, u64)>,
 }
 
 type SharedState = Arc<Mutex<ConnectData>>;
@@ -181,6 +182,7 @@ fn stop_session(data: &mut ConnectData) {
     }
     data.devices.clear();
     data.camera_frame = None;
+    data.hdmi_camera_frame = None;
 }
 
 fn is_private_ipv4(address: Ipv4Addr) -> bool {
@@ -550,6 +552,52 @@ fn get_latest_camera_frame(state: TauriState<'_, SharedState>) -> Result<Option<
     }))
 }
 
+#[tauri::command]
+fn set_hdmi_camera_frame(state: TauriState<'_, SharedState>, frame: String) -> Result<(), String> {
+    let encoded = frame
+        .strip_prefix("data:image/jpeg;base64,")
+        .ok_or_else(|| "The HDMI camera frame must be a JPEG data URL.".to_string())?;
+    if encoded.len() > MAX_CAMERA_FRAME_BYTES * 4 / 3 + 8 {
+        return Err("The HDMI camera frame exceeds the 512 KB limit.".into());
+    }
+    let bytes = BASE64
+        .decode(encoded)
+        .map_err(|error| format!("Could not decode the HDMI camera frame: {error}"))?;
+    if bytes.is_empty() || bytes.len() > MAX_CAMERA_FRAME_BYTES {
+        return Err("The HDMI camera frame is empty or exceeds the 512 KB limit.".into());
+    }
+    let mut data = state
+        .lock()
+        .map_err(|_| "The local HDMI camera feed is unavailable.".to_string())?;
+    data.hdmi_camera_frame = Some((bytes, now_seconds()));
+    Ok(())
+}
+
+#[tauri::command]
+fn get_latest_hdmi_camera_frame(
+    state: TauriState<'_, SharedState>,
+) -> Result<Option<String>, String> {
+    let data = state
+        .lock()
+        .map_err(|_| "The local HDMI camera feed is unavailable.".to_string())?;
+    Ok(data
+        .hdmi_camera_frame
+        .as_ref()
+        .and_then(|(frame, received_at)| {
+            (now_seconds().saturating_sub(*received_at) <= CAMERA_FRAME_MAX_AGE_SECONDS)
+                .then(|| format!("data:image/jpeg;base64,{}", BASE64.encode(frame)))
+        }))
+}
+
+#[tauri::command]
+fn clear_hdmi_camera_frame(state: TauriState<'_, SharedState>) -> Result<(), String> {
+    state
+        .lock()
+        .map_err(|_| "The local HDMI camera feed is unavailable.".to_string())?
+        .hdmi_camera_frame = None;
+    Ok(())
+}
+
 const SUBMISSION_PAGE: &str = r##"<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#07130f"><title>Send to Selah Studio</title>
 <style>
@@ -761,6 +809,9 @@ pub fn run() {
             start_wifi_sharing,
             get_wifi_status,
             get_latest_camera_frame,
+            set_hdmi_camera_frame,
+            get_latest_hdmi_camera_frame,
+            clear_hdmi_camera_frame,
             stop_wifi_sharing,
             get_incoming_submissions,
             update_incoming_submission,

@@ -7,10 +7,17 @@ export type OutputState = {
   transitionMode?: 'cold' | 'fade' | 'blur-words';
   backgroundDim?: number;
   cameraEnabled?: boolean;
+  cameraSource?: 'phone' | 'hdmi';
+  cameraMode?: 'feed' | 'text' | 'mix';
+  showMarkers?: boolean;
 };
 
 export const welcomeSlide: Slide = {
-  id: 'welcome', title: 'Welcome Walk', label: 'Welcome', text: 'Welcome home.', kind: 'media',
+  id: 'welcome',
+  title: 'Welcome Walk',
+  label: 'Welcome',
+  text: 'Welcome home.',
+  kind: 'media',
 };
 
 export function createStartupOutput(): OutputState {

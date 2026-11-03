@@ -1,15 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import {
-  chapters,
-  initialTimeline,
-  songs,
-  songSlides,
-  SCRIPTURE_BACKGROUNDS,
-  MEDIA_BACKGROUNDS,
-  type Slide,
-  type Song,
-  type MediaAsset,
-} from '@/lib/studio-data';
+import { chapters, initialTimeline, songs, songSlides, SCRIPTURE_BACKGROUNDS, MEDIA_BACKGROUNDS, type Slide, type Song, type MediaAsset } from '@/lib/studio-data';
 import {
   ArrowLeft,
   ArrowRight,
@@ -88,17 +78,11 @@ import { getGetScriptureQueryKey, getScripture, useGetScripture } from '@workspa
 import { usePushToTalk } from '@/hooks/use-push-to-talk';
 import { parseBibleContent } from '@/lib/scripture-content';
 import { searchPublicHymns, type PublicHymn } from '@/lib/song-search';
-import {
-  searchOfflineBible,
-  fetchOfflinePassage,
-  fetchChapterVersesSequence,
-  getOfflineChapterVerses,
-  type SearchVerseResult,
-  type SequenceVerseItem,
-} from '@/lib/offline-bible';
+import { searchOfflineBible, fetchOfflinePassage, fetchChapterVersesSequence, getOfflineChapterVerses, type SearchVerseResult, type SequenceVerseItem } from '@/lib/offline-bible';
 import { parseSpokenBibleReference, type ParsedSpokenReference } from '@/lib/spoken-bible-parser';
 import { DeckMediaThumbnail, MediaLibrary } from './media-library';
 import { StudioConnect, type IncomingSubmission } from './studio-connect';
+import { EmeraldCameraInput } from './emerald-camera-input';
 
 import { invoke, isTauri } from '@tauri-apps/api/core';
 
@@ -143,7 +127,12 @@ function parseBiblePassage(passage: unknown) {
 }
 
 function safeScheduleFileName(name: string) {
-  return name.trim().replace(/[<>:"/\\|?*]/g, '-').replace(/\.+$/g, '') || 'Service Schedule';
+  return (
+    name
+      .trim()
+      .replace(/[<>:"/\\|?*]/g, '-')
+      .replace(/\.+$/g, '') || 'Service Schedule'
+  );
 }
 
 function Action({ tip, children, ...props }: ButtonProps & { tip: string }) {
@@ -169,8 +158,17 @@ function SectionLabel({ children, icon }: { children: ReactNode; icon?: ReactNod
   );
 }
 
-const defaultSong: Song = songs[0] ?? { title: 'Amazing Grace', author: 'John Newton', tag: 'Hymn', lyrics: [] };
-const defaultSlide: Slide = { ...(songSlides(defaultSong)[0] ?? welcomeSlide), background: '/backgrounds/motion/Blue Particles.mp4', backgroundType: 'video' };
+const defaultSong: Song = songs[0] ?? {
+  title: 'Amazing Grace',
+  author: 'John Newton',
+  tag: 'Hymn',
+  lyrics: [],
+};
+const defaultSlide: Slide = {
+  ...(songSlides(defaultSong)[0] ?? welcomeSlide),
+  background: '/backgrounds/motion/Blue Particles.mp4',
+  backgroundType: 'video',
+};
 const psalmVerses = chapters['Psalms']?.verses ?? [];
 const accents: [string, string][] = [
   ['teal', 'Neon Teal'],
@@ -182,7 +180,6 @@ const projectorAccentColors = {
   gold: '#c7a663',
   purple: 'oklch(0.67 0.17 298)',
 } as const;
-
 
 const initialScripture: Slide = {
   id: 'ps23-1',
@@ -196,7 +193,7 @@ function compileMappedScripture(book: string, chapter: string, verses: string[],
   const canonicalBook = book === 'Psalms' ? 'Psalm' : book;
   const abbreviation = (bibleCodes[book] ?? book.slice(0, 3)).replace(/^(.)(.*)$/, (_, first, rest) => first + rest.toLowerCase());
   return verses.map((verseText, index) => {
-    const verseNum = numbers[index] ?? (index + 1);
+    const verseNum = numbers[index] ?? index + 1;
     return {
       id: `${book}-${chapter}-${verseNum}`,
       title: `${canonicalBook} ${chapter}:${verseNum}`,
@@ -209,26 +206,82 @@ function compileMappedScripture(book: string, chapter: string, verses: string[],
 }
 
 const bibleCodes: Record<string, string> = {
-  Genesis: 'GEN', Exodus: 'EXO', Leviticus: 'LEV', Numbers: 'NUM', Deuteronomy: 'DEU',
-  Joshua: 'JOS', Judges: 'JDG', Ruth: 'RUT', '1 Samuel': '1SA', '2 Samuel': '2SA',
-  '1 Kings': '1KI', '2 Kings': '2KI', '1 Chronicles': '1CH', '2 Chronicles': '2CH',
-  Ezra: 'EZR', Nehemiah: 'NEH', Esther: 'EST', Job: 'JOB', Psalms: 'PSA',
-  Proverbs: 'PRO', Ecclesiastes: 'ECC', 'Song of Solomon': 'SNG', Isaiah: 'ISA',
-  Jeremiah: 'JER', Lamentations: 'LAM', Ezekiel: 'EZK', Daniel: 'DAN', Hosea: 'HOS',
-  Joel: 'JOL', Amos: 'AMO', Obadiah: 'OBA', Jonah: 'JON', Micah: 'MIC',
-  Nahum: 'NAM', Habakkuk: 'HAB', Zephaniah: 'ZEP', Haggai: 'HAG', Zechariah: 'ZEC',
-  Malachi: 'MAL', Matthew: 'MAT', Mark: 'MRK', Luke: 'LUK', John: 'JHN',
-  Acts: 'ACT', Romans: 'ROM', '1 Corinthians': '1CO', '2 Corinthians': '2CO',
-  Galatians: 'GAL', Ephesians: 'EPH', Philippians: 'PHP', Colossians: 'COL',
-  '1 Thessalonians': '1TH', '2 Thessalonians': '2TH', '1 Timothy': '1TI',
-  '2 Timothy': '2TI', Titus: 'TIT', Philemon: 'PHM', Hebrews: 'HEB',
-  James: 'JAS', '1 Peter': '1PE', '2 Peter': '2PE', '1 John': '1JN',
-  '2 John': '2JN', '3 John': '3JN', Jude: 'JUD', Revelation: 'REV',
+  Genesis: 'GEN',
+  Exodus: 'EXO',
+  Leviticus: 'LEV',
+  Numbers: 'NUM',
+  Deuteronomy: 'DEU',
+  Joshua: 'JOS',
+  Judges: 'JDG',
+  Ruth: 'RUT',
+  '1 Samuel': '1SA',
+  '2 Samuel': '2SA',
+  '1 Kings': '1KI',
+  '2 Kings': '2KI',
+  '1 Chronicles': '1CH',
+  '2 Chronicles': '2CH',
+  Ezra: 'EZR',
+  Nehemiah: 'NEH',
+  Esther: 'EST',
+  Job: 'JOB',
+  Psalms: 'PSA',
+  Proverbs: 'PRO',
+  Ecclesiastes: 'ECC',
+  'Song of Solomon': 'SNG',
+  Isaiah: 'ISA',
+  Jeremiah: 'JER',
+  Lamentations: 'LAM',
+  Ezekiel: 'EZK',
+  Daniel: 'DAN',
+  Hosea: 'HOS',
+  Joel: 'JOL',
+  Amos: 'AMO',
+  Obadiah: 'OBA',
+  Jonah: 'JON',
+  Micah: 'MIC',
+  Nahum: 'NAM',
+  Habakkuk: 'HAB',
+  Zephaniah: 'ZEP',
+  Haggai: 'HAG',
+  Zechariah: 'ZEC',
+  Malachi: 'MAL',
+  Matthew: 'MAT',
+  Mark: 'MRK',
+  Luke: 'LUK',
+  John: 'JHN',
+  Acts: 'ACT',
+  Romans: 'ROM',
+  '1 Corinthians': '1CO',
+  '2 Corinthians': '2CO',
+  Galatians: 'GAL',
+  Ephesians: 'EPH',
+  Philippians: 'PHP',
+  Colossians: 'COL',
+  '1 Thessalonians': '1TH',
+  '2 Thessalonians': '2TH',
+  '1 Timothy': '1TI',
+  '2 Timothy': '2TI',
+  Titus: 'TIT',
+  Philemon: 'PHM',
+  Hebrews: 'HEB',
+  James: 'JAS',
+  '1 Peter': '1PE',
+  '2 Peter': '2PE',
+  '1 John': '1JN',
+  '2 John': '2JN',
+  '3 John': '3JN',
+  Jude: 'JUD',
+  Revelation: 'REV',
 };
 
 function scriptureParams(book: string, chapter: string, range: string, translationKey = 'KJV') {
   const bibleId = BIBLE_TRANSLATIONS[translationKey]?.id || DEFAULT_BIBLE_ID;
-  const code = bibleCodes[book] ?? book.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3);
+  const code =
+    bibleCodes[book] ??
+    book
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .slice(0, 3);
   const [start, end] = range.split('-').map((value) => value.trim());
   const passageId = `${code}.${chapter}.${start}${end ? `-${code}.${chapter}.${end}` : ''}`;
   return { bibleId, passageId };
@@ -307,7 +360,7 @@ function LibraryVideoThumb({ src, isScrolling }: { src: string; isScrolling: boo
           }
         }
       },
-      { threshold: 0.05 }
+      { threshold: 0.05 },
     );
 
     observer.observe(el);
@@ -359,10 +412,7 @@ export function Studio() {
   // Custom uploaded backgrounds state
   const [customScriptureBgs, setCustomScriptureBgs] = useState<MediaAsset[]>([]);
   const [customMediaBgs, setCustomMediaBgs] = useState<MediaAsset[]>([]);
-  const availableBackgrounds = Array.from(new Map(
-    [...customScriptureBgs, ...customMediaBgs, ...SCRIPTURE_BACKGROUNDS, ...MEDIA_BACKGROUNDS]
-      .map((asset) => [asset.url, asset] as const),
-  ).values());
+  const availableBackgrounds = Array.from(new Map([...customScriptureBgs, ...customMediaBgs, ...SCRIPTURE_BACKGROUNDS, ...MEDIA_BACKGROUNDS].map((asset) => [asset.url, asset] as const)).values());
   // Media Explorer Modal State
   const [isMediaExplorerOpen, setIsMediaExplorerOpen] = useState(false);
   const [isBackgroundScrolling, setIsBackgroundScrolling] = useState(false);
@@ -439,8 +489,8 @@ export function Studio() {
     const current = mediaDeckSlides[index];
     if (!current || !current.mediaUrl || (current.mediaType !== 'video' && current.mediaType !== 'youtube')) return;
     const updated = { ...current, audioMuted: !(current.audioMuted ?? true) };
-    setSlides((prev) => prev.map((item) => item.id === updated.id ? updated : item));
-    setMediaDeckSlides((prev) => prev.map((item) => item.id === updated.id ? updated : item));
+    setSlides((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+    setMediaDeckSlides((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
     loadPreview(updated);
     if (autoPush || output.slide.id === current.id) broadcast(updated);
     setIsDirty(true);
@@ -500,7 +550,10 @@ export function Studio() {
   const setStoreLive = useAppStore((state) => state.setLive);
   const setStoreCanvas = useAppStore((state) => state.setCanvas);
 
-  const [lookupParams, setLookupParams] = useState<{ bibleId: string; passageId: string } | null>(null);
+  const [lookupParams, setLookupParams] = useState<{
+    bibleId: string;
+    passageId: string;
+  } | null>(null);
   const [lookupError, setLookupError] = useState('');
   const [savedState, setSavedState] = useState<'saving' | 'saved' | 'error'>('saved');
   const [themeLoaded, setThemeLoaded] = useState(false);
@@ -511,17 +564,23 @@ export function Studio() {
   // Schedule state & dirty tracking
   const [isDirty, setIsDirty] = useState(false);
   const [currentScheduleName, setCurrentScheduleName] = useState(() => {
-    try { return localStorage.getItem('selah-active-schedule-name') || 'Sunday_Worship_Service'; } catch { return 'Sunday_Worship_Service'; }
+    try {
+      return localStorage.getItem('selah-active-schedule-name') || 'Sunday_Worship_Service';
+    } catch {
+      return 'Sunday_Worship_Service';
+    }
   });
   const [managedScheduleName, setManagedScheduleName] = useState(() => {
-    try { return localStorage.getItem('selah-managed-schedule-name') || ''; } catch { return ''; }
+    try {
+      return localStorage.getItem('selah-managed-schedule-name') || '';
+    } catch {
+      return '';
+    }
   });
   const [newScheduleOpen, setNewScheduleOpen] = useState(false);
   const [newScheduleName, setNewScheduleName] = useState('');
   const [newScheduleError, setNewScheduleError] = useState('');
-  const [recentSchedules, setRecentSchedules] = useState<
-    Array<{ id: string; name: string; savedAt: string; payload: any }>
-  >([]);
+  const [recentSchedules, setRecentSchedules] = useState<Array<{ id: string; name: string; savedAt: string; payload: any }>>([]);
   const [activeScheduleMedia, setActiveScheduleMedia] = useState<ScheduleMediaSnapshot>();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -544,7 +603,11 @@ export function Studio() {
     };
     setRecentSchedules((current) => {
       const next = [entry, ...current.filter((item) => item.name !== entry.name)].slice(0, 12);
-      try { localStorage.setItem('selah-recent-schedules', JSON.stringify(next)); } catch { /* Storage may be unavailable in a restricted webview. */ }
+      try {
+        localStorage.setItem('selah-recent-schedules', JSON.stringify(next));
+      } catch {
+        /* Storage may be unavailable in a restricted webview. */
+      }
       return next;
     });
   }
@@ -552,8 +615,7 @@ export function Studio() {
   // Save Schedule to computer (.selah JSON)
   async function handleSaveSchedule() {
     const scheduledSongs = librarySongs.filter((item) => item.title.trim());
-    if (song.title && mediaDeckSlides.some((slide) => slide.title === song.title)
-      && !scheduledSongs.some((item) => item.title === song.title && item.kind === song.kind)) {
+    if (song.title && mediaDeckSlides.some((slide) => slide.title === song.title) && !scheduledSongs.some((item) => item.title === song.title && item.kind === song.kind)) {
       scheduledSongs.push(song);
     }
     const activeScheduledSong = scheduledSongs.find((item) => item.title === song.title && item.kind === song.kind) ?? null;
@@ -728,12 +790,14 @@ export function Studio() {
     setMediaDeckSlides(scheduleDeck);
     setActiveScheduleMedia(payload.mediaLibrary);
     if (!payload.mediaLibrary) {
-      void createScheduleMediaSnapshot(scheduleDeck).then((snapshot) => {
-        setActiveScheduleMedia(snapshot.mediaLibrary);
-      }).catch((error) => {
-        console.error('Could not resolve schedule media references.', error);
-        setNotice(`Schedule loaded, but media details could not be resolved: ${error instanceof Error ? error.message : String(error)}`);
-      });
+      void createScheduleMediaSnapshot(scheduleDeck)
+        .then((snapshot) => {
+          setActiveScheduleMedia(snapshot.mediaLibrary);
+        })
+        .catch((error) => {
+          console.error('Could not resolve schedule media references.', error);
+          setNotice(`Schedule loaded, but media details could not be resolved: ${error instanceof Error ? error.message : String(error)}`);
+        });
     }
     const scheduleSongs = payload.songs;
     const primarySong = payload.song ?? scheduleSongs[0];
@@ -804,7 +868,6 @@ export function Studio() {
   const [scriptureBackground, setScriptureBackground] = useState('/backgrounds/stills/Red Particles.jpg');
   const [scriptureBackgroundType, setScriptureBackgroundType] = useState<'image' | 'video'>('image');
 
-
   // Scripture Keyword & Full-text Search
   const [scriptureSearchQuery, setScriptureSearchQuery] = useState('');
   const [scriptureSearchResults, setScriptureSearchResults] = useState<SearchVerseResult[]>([]);
@@ -827,16 +890,18 @@ export function Studio() {
     }
     setIsSearchingScripture(true);
     const timer = window.setTimeout(() => {
-      void searchOfflineBible(query, 100).then((results) => {
-        if (requestId !== scriptureSearchRequest.current) return;
-        setScriptureSearchResults(results);
-        setActiveSearchResult(0);
-        setIsSearchingScripture(false);
-      }).catch(() => {
-        if (requestId !== scriptureSearchRequest.current) return;
-        setScriptureSearchResults([]);
-        setIsSearchingScripture(false);
-      });
+      void searchOfflineBible(query, 100)
+        .then((results) => {
+          if (requestId !== scriptureSearchRequest.current) return;
+          setScriptureSearchResults(results);
+          setActiveSearchResult(0);
+          setIsSearchingScripture(false);
+        })
+        .catch(() => {
+          if (requestId !== scriptureSearchRequest.current) return;
+          setScriptureSearchResults([]);
+          setIsSearchingScripture(false);
+        });
     }, 220);
     return () => window.clearTimeout(timer);
   }, [scriptureSearchQuery]);
@@ -883,18 +948,24 @@ export function Studio() {
     try {
       const stored = JSON.parse(localStorage.getItem('selah-active-schedule-songs') || '[]') as Song[];
       if (Array.isArray(stored)) return [...songs, ...stored.filter((item) => !songs.some((seed) => seed.title === item.title && seed.kind === item.kind))];
-    } catch { /* Start with the built-in library. */ }
+    } catch {
+      /* Start with the built-in library. */
+    }
     return [...songs];
   });
   useEffect(() => {
     let cancelled = false;
-    void migrateLegacySongs().then((savedSongs) => {
-      if (!cancelled) setLibrarySongs((current) => mergeSongLibraries(songs, current, savedSongs));
-    }).catch((error) => {
-      console.error('Could not load saved songs from the local workspace.', error);
-      if (!cancelled) setSavedState('error');
-    });
-    return () => { cancelled = true; };
+    void migrateLegacySongs()
+      .then((savedSongs) => {
+        if (!cancelled) setLibrarySongs((current) => mergeSongLibraries(songs, current, savedSongs));
+      })
+      .catch((error) => {
+        console.error('Could not load saved songs from the local workspace.', error);
+        if (!cancelled) setSavedState('error');
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
   const [pendingLibrarySong, setPendingLibrarySong] = useState<Song | null>(null);
   const [bookFocused, setBookFocused] = useState(false);
@@ -919,6 +990,11 @@ export function Studio() {
   const [settings, setSettings] = useState(false);
   const [guide, setGuide] = useState(false);
   const [cameraFrame, setCameraFrame] = useState<string>();
+  const [hdmiFrame, setHdmiFrame] = useState<string>();
+  const [stagedCameraSource, setStagedCameraSource] = useState<'phone' | 'hdmi'>('phone');
+  const [stagedCameraMode, setStagedCameraMode] = useState<'feed' | 'text' | 'mix'>('mix');
+  const [showMarkers, setShowMarkers] = useState(true);
+  const [hdmiResolution, setHdmiResolution] = useState<720 | 1080>(720);
   const [guideStep, setGuideStep] = useState(0);
   const [timeline, setTimeline] = useState(initialTimeline);
   const [book, setBook] = useState('Psalms');
@@ -937,14 +1013,39 @@ export function Studio() {
       } catch (error) {
         console.error('Could not read the phone camera feed.', error);
       }
+      try {
+        const frame = await invoke<string | null>('get_latest_hdmi_camera_frame');
+        if (active) setHdmiFrame(frame ?? undefined);
+      } catch (error) {
+        console.error('Could not read the HDMI camera feed.', error);
+      }
     };
     void refreshCameraFrame();
-    const timer = window.setInterval(() => { void refreshCameraFrame(); }, 120);
+    const timer = window.setInterval(() => {
+      void refreshCameraFrame();
+    }, 120);
     return () => {
       active = false;
       window.clearInterval(timer);
     };
   }, []);
+  const stagedCameraFrame = stagedCameraSource === 'hdmi' ? hdmiFrame : cameraFrame;
+  const liveCameraFrame = output.cameraSource === 'hdmi' ? hdmiFrame : cameraFrame;
+
+  useEffect(() => {
+    if (!output.cameraEnabled || output.cameraMode === 'text' || liveCameraFrame) return;
+    const timer = window.setTimeout(() => {
+      const currentFrame = output.cameraSource === 'hdmi' ? hdmiFrame : cameraFrame;
+      if (currentFrame) return;
+      setNotice('The live camera disconnected. Emerald standby is showing; choose another source and send it Live.');
+      setOutput((current) => {
+        if (!current.cameraEnabled || current.cameraMode === 'text') return current;
+        if (current.cameraSource !== output.cameraSource) return current;
+        return { ...current, mode: 'logo', cameraEnabled: false };
+      });
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [output.cameraEnabled, output.cameraMode, output.cameraSource, liveCameraFrame, cameraFrame, hdmiFrame]);
   const channel = useRef<BroadcastChannel | null>(null);
   const outputRef = useRef(output);
   const chapterInput = useRef<HTMLInputElement>(null);
@@ -961,16 +1062,18 @@ export function Studio() {
 
     setPublicHymnSearchState('searching');
     const timeout = window.setTimeout(() => {
-      void searchPublicHymns(query, 8).then((results) => {
-        if (cancelled) return;
-        setPublicHymnResults(results);
-        setPublicHymnSearchState('idle');
-      }).catch((error) => {
-        console.error('Could not search the bundled public hymn catalog.', error);
-        if (cancelled) return;
-        setPublicHymnResults([]);
-        setPublicHymnSearchState('error');
-      });
+      void searchPublicHymns(query, 8)
+        .then((results) => {
+          if (cancelled) return;
+          setPublicHymnResults(results);
+          setPublicHymnSearchState('idle');
+        })
+        .catch((error) => {
+          console.error('Could not search the bundled public hymn catalog.', error);
+          if (cancelled) return;
+          setPublicHymnResults([]);
+          setPublicHymnSearchState('error');
+        });
     }, 180);
 
     return () => {
@@ -1023,34 +1126,40 @@ export function Studio() {
       localStorage.setItem('selah-active-schedule-name', currentScheduleName);
       if (managedScheduleName) localStorage.setItem('selah-managed-schedule-name', managedScheduleName);
       else localStorage.removeItem('selah-managed-schedule-name');
-    } catch { /* Browser storage may be unavailable. */ }
+    } catch {
+      /* Browser storage may be unavailable. */
+    }
   }, [currentScheduleName, managedScheduleName]);
 
-  const scriptureQuery = useGetScripture(
-    lookupParams ?? { bibleId: DEFAULT_BIBLE_ID, passageId: 'GEN.1.1' },
-    {
-      query: {
-        enabled: !!lookupParams,
-        queryKey: getGetScriptureQueryKey(lookupParams ?? { bibleId: '', passageId: '' }),
-        retry: 0,
-      },
+  const scriptureQuery = useGetScripture(lookupParams ?? { bibleId: DEFAULT_BIBLE_ID, passageId: 'GEN.1.1' }, {
+    query: {
+      enabled: !!lookupParams,
+      queryKey: getGetScriptureQueryKey(lookupParams ?? { bibleId: '', passageId: '' }),
+      retry: 0,
     },
-  );
+  });
 
   const voice = usePushToTalk((text) => {
     const parsed = parseSpokenBibleReference(text);
     setVoiceFeedback({ transcript: text, parsed });
   });
   const listening = voice.listening;
-  const activeSlide = (selectedMediaDeckIdx !== null
-    ? mediaDeckSlides[selectedMediaDeckIdx]
-    : slides[selected] ?? mediaDeckSlides[selected]) || slides[0] || welcomeSlide;
+  const activeSlide = (selectedMediaDeckIdx !== null ? mediaDeckSlides[selectedMediaDeckIdx] : (slides[selected] ?? mediaDeckSlides[selected])) || slides[0] || welcomeSlide;
   const bookMatches = matchingBooks(book);
 
   // Take slide live directly
-  const broadcast = useCallback((slide: Slide) => {
-    setOutput({ slide, mode: 'normal', transitionMode });
-  }, [transitionMode]);
+  const broadcast = useCallback(
+    (slide: Slide) => {
+      setOutput((current) => ({
+        ...current,
+        slide,
+        mode: 'normal',
+        transitionMode,
+        showMarkers,
+      }));
+    },
+    [showMarkers, transitionMode],
+  );
 
   function presentMediaSelection(additions: Slide[], title: string, type: 'media' | 'album') {
     const prepared = prepareMediaDeck(mediaDeckSlides, additions, type, slides);
@@ -1072,9 +1181,7 @@ export function Studio() {
     setStorePreview(target);
     broadcast(target);
     setIsDirty(true);
-    setNotice(type === 'album'
-      ? `Presented "${title}" from the beginning in its saved order.`
-      : `Presented "${target.title}"${prepared.clearOtherDeck ? '' : ' and kept the other standalone media in the deck'}.`);
+    setNotice(type === 'album' ? `Presented "${title}" from the beginning in its saved order.` : `Presented "${target.title}"${prepared.clearOtherDeck ? '' : ' and kept the other standalone media in the deck'}.`);
   }
   // Auto-fallback: Switch away from word blur if active slide is scripture
 
@@ -1092,11 +1199,14 @@ export function Studio() {
 
   // Sync output to BroadcastChannel & LocalStorage
   useEffect(() => {
-    const accentTheme: OutputState['accentTheme'] = theme === 'gold' || theme === 'purple' ? theme : 'teal';
+    const accentTheme: OutputState['accentTheme'] = __SELAH_EDITION__ === 'emerald' ? 'teal' : theme === 'gold' || theme === 'purple' ? theme : 'teal';
     const projectorOutput = { ...output, accentTheme };
     outputRef.current = projectorOutput;
     setStoreLive(output.slide);
-    postChannelMessage(channel.current, { type: 'output', output: projectorOutput });
+    postChannelMessage(channel.current, {
+      type: 'output',
+      output: projectorOutput,
+    });
     try {
       localStorage.setItem('selah-projector-latest', JSON.stringify(projectorOutput));
     } catch {
@@ -1105,7 +1215,7 @@ export function Studio() {
   }, [output, setStoreLive, theme]);
 
   useEffect(() => {
-    setOutput((current) => current.backgroundDim === backgroundDim ? current : { ...current, backgroundDim });
+    setOutput((current) => (current.backgroundDim === backgroundDim ? current : { ...current, backgroundDim }));
   }, [backgroundDim]);
 
   useEffect(() => {
@@ -1131,9 +1241,7 @@ export function Studio() {
         if (cancelled) return;
         setTheme(accent);
         if (preferences.autoPush !== undefined) setAutoPush(preferences.autoPush);
-        const scriptureBg = preferences.scriptureBackground === '/backgrounds/stills/Echo Spheres Party - 16x9.jpg'
-          ? '/backgrounds/stills/Red Particles.jpg'
-          : preferences.scriptureBackground;
+        const scriptureBg = preferences.scriptureBackground === '/backgrounds/stills/Echo Spheres Party - 16x9.jpg' ? '/backgrounds/stills/Red Particles.jpg' : preferences.scriptureBackground;
         if (scriptureBg) setScriptureBackground(scriptureBg);
         if (preferences.scriptureBackgroundType) setScriptureBackgroundType(preferences.scriptureBackgroundType);
         if (preferences.mediaBackground) setMediaBackground(preferences.mediaBackground);
@@ -1327,9 +1435,7 @@ export function Studio() {
         }
       }
 
-      const isInput =
-        e.target instanceof HTMLElement &&
-        (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable);
+      const isInput = e.target instanceof HTMLElement && (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable);
 
       if (!voiceFeedback && !voice.transcribing) {
         if (e.key.toLowerCase() === 'v' && !isInput && !e.repeat && !e.ctrlKey && !e.metaKey) {
@@ -1350,17 +1456,26 @@ export function Studio() {
       // Panic Functions
       if (e.key === 'F1') {
         e.preventDefault();
-        setOutput((o) => ({ ...o, mode: o.mode === 'blackout' ? 'normal' : 'blackout' }));
+        setOutput((o) => ({
+          ...o,
+          mode: o.mode === 'blackout' ? 'normal' : 'blackout',
+        }));
         return;
       }
       if (e.key === 'F2') {
         e.preventDefault();
-        setOutput((o) => ({ ...o, mode: o.mode === 'clear' ? 'normal' : 'clear' }));
+        setOutput((o) => ({
+          ...o,
+          mode: o.mode === 'clear' ? 'normal' : 'clear',
+        }));
         return;
       }
       if (e.key === 'F3') {
         e.preventDefault();
-        setOutput((o) => ({ ...o, mode: o.mode === 'logo' ? 'normal' : 'logo' }));
+        setOutput((o) => ({
+          ...o,
+          mode: o.mode === 'logo' ? 'normal' : 'logo',
+        }));
         return;
       }
 
@@ -1464,13 +1579,13 @@ export function Studio() {
 
   async function persistSongLibraryItem(item: Song, previousSong?: Song) {
     await saveLocalSong(item, previousSong);
-    setLibrarySongs((current) => mergeSongLibraries(
-      songs,
-      current.filter((existing) => !previousSong
-        || existing.title !== previousSong.title
-        || existing.kind !== previousSong.kind),
-      [item],
-    ));
+    setLibrarySongs((current) =>
+      mergeSongLibraries(
+        songs,
+        current.filter((existing) => !previousSong || existing.title !== previousSong.title || existing.kind !== previousSong.kind),
+        [item],
+      ),
+    );
     setIsDirty(true);
     setSavedState('saved');
   }
@@ -1493,20 +1608,24 @@ export function Studio() {
       tag: submission.kind === 'announcement' ? 'Announcement' : 'Studio Connect',
       kind,
       lyrics,
-      ...(kind === 'song' ? {
-        sections: lyrics.map((text) => ({ text, chorus: false })),
-        headerStyle: {
-          weight: '700' as const,
-          size: 100,
-          color: '#ffffff',
-          font: 'font-montserrat',
-          showMarker: true,
-        },
-      } : {}),
+      ...(kind === 'song'
+        ? {
+            sections: lyrics.map((text) => ({ text, chorus: false })),
+            headerStyle: {
+              weight: '700' as const,
+              size: 100,
+              color: '#ffffff',
+              font: 'font-montserrat',
+              showMarker: true,
+            },
+          }
+        : {}),
       ...(kind === 'sermon' ? { sermonText: content } : {}),
       ...(submission.notes ? { notes: submission.notes } : {}),
       ...(submission.scriptureReferences
-        ? { scriptureReferences: submission.scriptureReferences.split(/[;,]\s*/).filter(Boolean) }
+        ? {
+            scriptureReferences: submission.scriptureReferences.split(/[;,]\s*/).filter(Boolean),
+          }
         : {}),
       sourceSubmissionId: submission.id,
     };
@@ -1611,7 +1730,6 @@ export function Studio() {
           console.error('Could not save the edited song to the local workspace.', error);
           setSavedState('error');
         });
-
       }
 
       if (selectedMediaDeckIdx === editingSlideIdx || selected === editingSlideIdx) {
@@ -1627,9 +1745,17 @@ export function Studio() {
 
   function parseLyrics(value: string) {
     setLyrics(value);
-    const chunks = value.trim().split(/\n\s*\n/).filter(Boolean);
+    const chunks = value
+      .trim()
+      .split(/\n\s*\n/)
+      .filter(Boolean);
     if (!chunks.length) return;
-    const customSong = { title: 'Untitled worship song', author: 'Your lyrics', tag: 'Custom', lyrics: chunks };
+    const customSong = {
+      title: 'Untitled worship song',
+      author: 'Your lyrics',
+      tag: 'Custom',
+      lyrics: chunks,
+    };
     setSong(customSong);
     const next = songSlides(customSong);
     setSlides(next);
@@ -1661,49 +1787,59 @@ export function Studio() {
 
   function shakeField(field: string) {
     setInvalidField(field);
-    window.setTimeout(() => setInvalidField((current) => current === field ? '' : current), 600);
+    window.setTimeout(() => setInvalidField((current) => (current === field ? '' : current)), 600);
   }
 
-  const loadSequence = useCallback((b: string, c: string | number, highlightRange?: number[]) => {
-    const requestId = ++sequenceRequestId.current;
-    if (selectedTranslation === 'KJV') {
-      void fetchChapterVersesSequence(b, c).then((seq) => {
-        if (requestId !== sequenceRequestId.current || !seq.length) return;
-        setSequenceVerses(seq);
-        if (highlightRange?.length) setHighlightedVerses(highlightRange);
-      });
-      return;
-    }
-
-    const canonicalBook = resolveBook(b) ?? b;
-    const code = bibleCodes[canonicalBook] ?? canonicalBook.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3);
-    const bibleId = BIBLE_TRANSLATIONS[selectedTranslation]?.id ?? DEFAULT_BIBLE_ID;
-    void getScripture({ bibleId, passageId: `${code}.${c}` }).then((passage) => {
-      if (requestId !== sequenceRequestId.current) return;
-      const parsed = parseBiblePassage(passage);
-      const numbers = parsed.verseNumbers.length === parsed.verses.length
-        ? parsed.verseNumbers
-        : parsed.verses.map((_, index) => index + 1);
-      const sequence = parsed.verses.map((text, index) => ({
-        verseNumber: numbers[index] ?? index + 1,
-        text,
-        reference: `${canonicalBook} ${c}:${numbers[index] ?? index + 1}`,
-      }));
-      if (!sequence.length) throw new Error('The translation returned no verses for this chapter.');
-      setSequenceVerses(sequence);
-      if (highlightRange?.length) setHighlightedVerses(highlightRange);
-      setLookupError('');
-    }).catch((error: unknown) => {
-      if (requestId !== sequenceRequestId.current) return;
-      if (error instanceof TypeError) {
-        setLookupError(isTauri() && !import.meta.env.DEV
-          ? 'Could not reach the scripture API service. Set VITE_TAURI_API_BASE_URL to your deployed API service when building the desktop app.'
-          : 'Could not reach the scripture API server. Start it with “pnpm dev:all” and check VITE_API_BASE_URL.');
-      } else {
-        setLookupError(error instanceof Error ? error.message : `Could not load ${selectedTranslation}.`);
+  const loadSequence = useCallback(
+    (b: string, c: string | number, highlightRange?: number[]) => {
+      const requestId = ++sequenceRequestId.current;
+      if (selectedTranslation === 'KJV') {
+        void fetchChapterVersesSequence(b, c).then((seq) => {
+          if (requestId !== sequenceRequestId.current || !seq.length) return;
+          setSequenceVerses(seq);
+          if (highlightRange?.length) setHighlightedVerses(highlightRange);
+        });
+        return;
       }
-    });
-  }, [selectedTranslation]);
+
+      const canonicalBook = resolveBook(b) ?? b;
+      const code =
+        bibleCodes[canonicalBook] ??
+        canonicalBook
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, '')
+          .slice(0, 3);
+      const bibleId = BIBLE_TRANSLATIONS[selectedTranslation]?.id ?? DEFAULT_BIBLE_ID;
+      void getScripture({ bibleId, passageId: `${code}.${c}` })
+        .then((passage) => {
+          if (requestId !== sequenceRequestId.current) return;
+          const parsed = parseBiblePassage(passage);
+          const numbers = parsed.verseNumbers.length === parsed.verses.length ? parsed.verseNumbers : parsed.verses.map((_, index) => index + 1);
+          const sequence = parsed.verses.map((text, index) => ({
+            verseNumber: numbers[index] ?? index + 1,
+            text,
+            reference: `${canonicalBook} ${c}:${numbers[index] ?? index + 1}`,
+          }));
+          if (!sequence.length) throw new Error('The translation returned no verses for this chapter.');
+          setSequenceVerses(sequence);
+          if (highlightRange?.length) setHighlightedVerses(highlightRange);
+          setLookupError('');
+        })
+        .catch((error: unknown) => {
+          if (requestId !== sequenceRequestId.current) return;
+          if (error instanceof TypeError) {
+            setLookupError(
+              isTauri() && !import.meta.env.DEV
+                ? 'Could not reach the scripture API service. Set VITE_TAURI_API_BASE_URL to your deployed API service when building the desktop app.'
+                : 'Could not reach the scripture API server. Start it with “pnpm dev:all” and check VITE_API_BASE_URL.',
+            );
+          } else {
+            setLookupError(error instanceof Error ? error.message : `Could not load ${selectedTranslation}.`);
+          }
+        });
+    },
+    [selectedTranslation],
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => loadSequence(book, chapter), selectedTranslation === 'KJV' ? 0 : 300);
@@ -1761,15 +1897,15 @@ export function Studio() {
           if (current && number === current[current.length - 1] + 1) current.push(number);
           else ranges.push([number]);
         }
-        const passages = await Promise.all(ranges.map(([start, ...rest]) => {
-          const end = rest[rest.length - 1];
-          return getScripture(scriptureParams(book, chapter, end ? `${start}-${end}` : String(start), translationKey));
-        }));
+        const passages = await Promise.all(
+          ranges.map(([start, ...rest]) => {
+            const end = rest[rest.length - 1];
+            return getScripture(scriptureParams(book, chapter, end ? `${start}-${end}` : String(start), translationKey));
+          }),
+        );
         const parsedRanges = passages.map(parseBiblePassage);
         verses = parsedRanges.flatMap((parsed) => parsed.verses);
-        verseNumbers = parsedRanges.flatMap((parsed, index) => parsed.verseNumbers.length === parsed.verses.length
-          ? parsed.verseNumbers
-          : ranges[index].slice(0, parsed.verses.length));
+        verseNumbers = parsedRanges.flatMap((parsed, index) => (parsed.verseNumbers.length === parsed.verses.length ? parsed.verseNumbers : ranges[index].slice(0, parsed.verses.length)));
         if (!verses.length) throw new Error('The selected translation returned no verses.');
       }
 
@@ -1790,7 +1926,11 @@ export function Studio() {
       if (firstSelectedSlide) {
         setStorePreview(firstSelectedSlide);
         if (takeLive) {
-          setOutput({ slide: firstSelectedSlide, mode: 'normal', transitionMode });
+          setOutput({
+            slide: firstSelectedSlide,
+            mode: 'normal',
+            transitionMode,
+          });
           setStoreLive(firstSelectedSlide);
           setNotice(`Projected ${translationKey} selection live`);
         } else {
@@ -1863,11 +2003,26 @@ export function Studio() {
   function chooseScriptureBackground(asset: MediaAsset) {
     setScriptureBackground(asset.url);
     setScriptureBackgroundType(asset.type);
-    setSlides((items) => items.map((slide) => slide.kind === 'scripture' ? { ...slide, background: asset.url, backgroundType: asset.type } : slide));
-    setMediaDeckSlides((items) => items.map((slide) => slide.kind === 'scripture' ? { ...slide, background: asset.url, backgroundType: asset.type } : slide));
-    setOutput((current) => current.slide.kind === 'scripture' ? { ...current, slide: { ...current.slide, background: asset.url, backgroundType: asset.type } } : current);
+    setSlides((items) => items.map((slide) => (slide.kind === 'scripture' ? { ...slide, background: asset.url, backgroundType: asset.type } : slide)));
+    setMediaDeckSlides((items) => items.map((slide) => (slide.kind === 'scripture' ? { ...slide, background: asset.url, backgroundType: asset.type } : slide)));
+    setOutput((current) =>
+      current.slide.kind === 'scripture'
+        ? {
+            ...current,
+            slide: {
+              ...current.slide,
+              background: asset.url,
+              backgroundType: asset.type,
+            },
+          }
+        : current,
+    );
     if (slides[selected]?.kind === 'scripture') {
-      const updated = { ...slides[selected]!, background: asset.url, backgroundType: asset.type };
+      const updated = {
+        ...slides[selected]!,
+        background: asset.url,
+        backgroundType: asset.type,
+      };
       loadPreview(updated);
       if (autoPush) broadcast(updated);
     }
@@ -1882,25 +2037,26 @@ export function Studio() {
     setMediaBackgroundType(asset.type);
 
     // Dynamically re-bind active song/sermon slides with this background
-    setSlides((prev) =>
-      prev.map((slide) =>
-        slide.kind === 'song' || slide.kind === 'sermon'
-          ? { ...slide, background: asset.url, backgroundType: asset.type }
-          : slide
-      )
+    setSlides((prev) => prev.map((slide) => (slide.kind === 'song' || slide.kind === 'sermon' ? { ...slide, background: asset.url, backgroundType: asset.type } : slide)));
+    setMediaDeckSlides((prev) => prev.map((slide) => (slide.kind === 'song' || slide.kind === 'sermon' ? { ...slide, background: asset.url, backgroundType: asset.type } : slide)));
+    setOutput((current) =>
+      current.slide.kind === 'song' || current.slide.kind === 'sermon'
+        ? {
+            ...current,
+            slide: {
+              ...current.slide,
+              background: asset.url,
+              backgroundType: asset.type,
+            },
+          }
+        : current,
     );
-    setMediaDeckSlides((prev) =>
-      prev.map((slide) =>
-        slide.kind === 'song' || slide.kind === 'sermon'
-          ? { ...slide, background: asset.url, backgroundType: asset.type }
-          : slide
-      )
-    );
-    setOutput((current) => current.slide.kind === 'song' || current.slide.kind === 'sermon'
-      ? { ...current, slide: { ...current.slide, background: asset.url, backgroundType: asset.type } }
-      : current);
     if (slides[selected] && (slides[selected]!.kind === 'song' || slides[selected]!.kind === 'sermon')) {
-      const updated = { ...slides[selected]!, background: asset.url, backgroundType: asset.type };
+      const updated = {
+        ...slides[selected]!,
+        background: asset.url,
+        backgroundType: asset.type,
+      };
       loadPreview(updated);
       if (autoPush) broadcast(updated);
     }
@@ -1912,14 +2068,22 @@ export function Studio() {
   function renderBackgroundCard(asset: MediaAsset) {
     const isScripture = scriptureBackground === asset.url;
     const isSong = mediaBackground === asset.url;
-    return <article className="background-library-card" key={asset.id}>
-      <div className="background-library-thumb">{asset.type === 'video' ? <LibraryVideoThumb src={asset.url} isScrolling={isBackgroundScrolling} /> : <img src={asset.url} alt="" loading="lazy" decoding="async" />}</div>
-      <strong title={asset.title}>{asset.title}</strong>
-      <div className="background-targets" role="group" aria-label={`Assign ${asset.title} background`}>
-        <button type="button" className={isScripture ? 'active' : ''} aria-pressed={isScripture} onClick={() => chooseScriptureBackground(asset)}><span className="target-radio"/>Scripture</button>
-        <button type="button" className={isSong ? 'active' : ''} aria-pressed={isSong} onClick={() => chooseMediaBackground(asset)}><span className="target-radio"/>Song / Sermon</button>
-      </div>
-    </article>;
+    return (
+      <article className="background-library-card" key={asset.id}>
+        <div className="background-library-thumb">{asset.type === 'video' ? <LibraryVideoThumb src={asset.url} isScrolling={isBackgroundScrolling} /> : <img src={asset.url} alt="" loading="lazy" decoding="async" />}</div>
+        <strong title={asset.title}>{asset.title}</strong>
+        <div className="background-targets" role="group" aria-label={`Assign ${asset.title} background`}>
+          <button type="button" className={isScripture ? 'active' : ''} aria-pressed={isScripture} onClick={() => chooseScriptureBackground(asset)}>
+            <span className="target-radio" />
+            Scripture
+          </button>
+          <button type="button" className={isSong ? 'active' : ''} aria-pressed={isSong} onClick={() => chooseMediaBackground(asset)}>
+            <span className="target-radio" />
+            Song / Sermon
+          </button>
+        </div>
+      </article>
+    );
   }
 
   function acceptVoiceFeedback(parsed: ParsedSpokenReference) {
@@ -1937,12 +2101,7 @@ export function Studio() {
 
     void fetchOfflinePassage(parsed.book, Number(parsed.chapter), requestedNumbers).then((offlinePassage) => {
       if (offlinePassage?.verses.length) {
-        const next = compileMappedScripture(
-          parsed.book,
-          parsed.chapter,
-          offlinePassage.verses,
-          offlinePassage.verseNumbers,
-        ).map((slide) => ({
+        const next = compileMappedScripture(parsed.book, parsed.chapter, offlinePassage.verses, offlinePassage.verseNumbers).map((slide) => ({
           ...slide,
           background: scriptureBackground,
           backgroundType: scriptureBackgroundType,
@@ -1967,7 +2126,12 @@ export function Studio() {
     timelineSlides.current[id] = slides.map((slide) => ({ ...slide }));
     setTimeline((items) => [
       ...items,
-      { id, title: activeSlide.title, subtitle: `${slides.length} slides`, kind: activeSlide.kind },
+      {
+        id,
+        title: activeSlide.title,
+        subtitle: `${slides.length} slides`,
+        kind: activeSlide.kind,
+      },
     ]);
     setNotice('Added to service timeline');
   }
@@ -1998,15 +2162,13 @@ export function Studio() {
       loadSong(librarySongs.find((s) => s.title === item.title) || song);
     } else if (item.kind === 'scripture') {
       setTab('Scriptures');
-      const next = psalmVerses.map(
-        (text, i): Slide => ({
-          id: `ps-${i}`,
-          text,
-          label: `Verse ${i + 1}`,
-          title: `Psalm 23:${i + 1}`,
-          kind: 'scripture',
-        }),
-      );
+      const next = psalmVerses.map((text, i): Slide => ({
+        id: `ps-${i}`,
+        text,
+        label: `Verse ${i + 1}`,
+        title: `Psalm 23:${i + 1}`,
+        kind: 'scripture',
+      }));
       setSlides(next);
       setMediaDeckSlides(next);
       setSelected(0);
@@ -2024,17 +2186,9 @@ export function Studio() {
     }
 
     try {
-      const [{ WebviewWindow }, { availableMonitors, currentMonitor }] = await Promise.all([
-        import('@tauri-apps/api/webviewWindow'),
-        import('@tauri-apps/api/window'),
-      ]);
-      const [monitors, activeMonitor] = await Promise.all([
-        availableMonitors(),
-        currentMonitor(),
-      ]);
-      const externalMonitor = monitors.find((monitor) =>
-        activeMonitor && (monitor.position.x !== activeMonitor.position.x || monitor.position.y !== activeMonitor.position.y),
-      );
+      const [{ WebviewWindow }, { availableMonitors, currentMonitor }] = await Promise.all([import('@tauri-apps/api/webviewWindow'), import('@tauri-apps/api/window')]);
+      const [monitors, activeMonitor] = await Promise.all([availableMonitors(), currentMonitor()]);
+      const externalMonitor = monitors.find((monitor) => activeMonitor && (monitor.position.x !== activeMonitor.position.x || monitor.position.y !== activeMonitor.position.y));
       let projectorWindow = await WebviewWindow.getByLabel('projector');
 
       if (!projectorWindow) {
@@ -2057,9 +2211,7 @@ export function Studio() {
         await projectorWindow.setFullscreenOnMonitor(externalMonitor.position);
       }
       await projectorWindow.setFocus();
-      setNotice(externalMonitor
-        ? 'Projector output is fullscreen on the extended display.'
-        : 'Projector opened. Connect or extend a second display to send output there.');
+      setNotice(externalMonitor ? 'Projector output is fullscreen on the extended display.' : 'Projector opened. Connect or extend a second display to send output there.');
     } catch (error) {
       console.error('Could not open the projector output window.', error);
       const detail = error instanceof Error ? error.message : String(error);
@@ -2075,7 +2227,7 @@ export function Studio() {
         <div className="desktop-window-warning" role="status">
           <div className="desktop-window-warning-card">
             <img src={logo.url} alt="" />
-          <p className="eyebrow">SELAH STUDIO · DESKTOP WORKSPACE</p>
+            <p className="eyebrow">SELAH STUDIO · DESKTOP WORKSPACE</p>
             <h1>Give the studio a little more room.</h1>
             <p>Selah Studio needs a window at least 768 pixels wide. Please maximize this window or open the app on a desktop display.</p>
           </div>
@@ -2125,7 +2277,9 @@ export function Studio() {
                 <div className="voice-error-popover" role="alert">
                   <div className="voice-error-heading">
                     <strong>Push to Talk</strong>
-                    <button type="button" aria-label="Dismiss voice error" onClick={voice.dismissError}><X size={13} /></button>
+                    <button type="button" aria-label="Dismiss voice error" onClick={voice.dismissError}>
+                      <X size={13} />
+                    </button>
                   </div>
                   <span>{voice.error}</span>
                 </div>
@@ -2168,12 +2322,9 @@ export function Studio() {
                   <RotateCcw size={12} className="mr-1" /> Retry (R)
                 </Button>
                 {voiceFeedback.parsed && (
-                  <Button
-                    size="sm"
-                    className="accent-action font-semibold"
-                    onClick={() => acceptVoiceFeedback(voiceFeedback.parsed!)}
-                  >
-                    <Check size={13} className="mr-1" />Enter ↵
+                  <Button size="sm" className="accent-action font-semibold" onClick={() => acceptVoiceFeedback(voiceFeedback.parsed!)}>
+                    <Check size={13} className="mr-1" />
+                    Enter ↵
                   </Button>
                 )}
               </div>
@@ -2181,20 +2332,15 @@ export function Studio() {
           )}
 
           <div className="header-actions">
-            <div className="theme-picker" aria-label="Accent color">
-              {accents.map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-label={label}
-                  title={label}
-                  className={`theme-swatch swatch-${value} ${theme === value ? 'chosen' : ''}`}
-                  onClick={() => setTheme(value)}
-                >
-                  {theme === value && <Check size={11} />}
-                </button>
-              ))}
-            </div>
+            {__SELAH_EDITION__ !== 'emerald' && (
+              <div className="theme-picker" aria-label="Accent color">
+                {accents.map(([value, label]) => (
+                  <button key={value} type="button" aria-label={label} title={label} className={`theme-swatch swatch-${value} ${theme === value ? 'chosen' : ''}`} onClick={() => setTheme(value)}>
+                    {theme === value && <Check size={11} />}
+                  </button>
+                ))}
+              </div>
+            )}
             <span className="header-divider" />
             <Action tip="Shortcuts & Workflow" variant="ghost" size="icon" onClick={() => setWorkflow(true)}>
               <Info />
@@ -2228,52 +2374,33 @@ export function Studio() {
             </span>
             <strong>{currentScheduleName.replace(/[_-]+/g, ' ')}</strong>
             <div className="flex items-center gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".selah,.json"
-                className="hidden"
-                onChange={handleImportSchedule}
-              />
+              <input ref={fileInputRef} type="file" accept=".selah,.json" className="hidden" onChange={handleImportSchedule} />
               <Button
                 size="sm"
                 variant="outline"
                 className="accent-action h-7 text-xs gap-1"
-                onClick={() => { setNewScheduleName(''); setNewScheduleError(''); setNewScheduleOpen(true); }}
+                onClick={() => {
+                  setNewScheduleName('');
+                  setNewScheduleError('');
+                  setNewScheduleOpen(true);
+                }}
               >
                 <Plus size={12} /> New Schedule
               </Button>
               <Button size="sm" variant="outline" className="h-7 text-xs gap-1 bg-white/5 border-white/10 hover:bg-white/10" onClick={() => void chooseScheduleFile()}>
                 <Upload size={12} /> Load Schedule
               </Button>
-              <Button
-                size="sm"
-                className={`accent-action h-7 text-xs font-bold gap-1 transition-all ${isDirty
-                  ? 'opacity-100'
-                  : 'opacity-50'
-                  }`}
-                onClick={handleSaveSchedule}
-              >
+              <Button size="sm" className={`accent-action h-7 text-xs font-bold gap-1 transition-all ${isDirty ? 'opacity-100' : 'opacity-50'}`} onClick={handleSaveSchedule}>
                 <CheckCheck size={12} /> Save Schedule {isDirty && '•'}
               </Button>
             </div>
           </div>
           {/* Insert inside the service-bar controls around line 810 */}
           <div className="flex items-center gap-1 bg-black/40 p-1 rounded-lg border border-white/10">
-            <button
-              type="button"
-              className={`transition-choice px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${transitionMode === 'cold' ? 'active' : ''
-                }`}
-              onClick={() => setTransitionMode('cold')}
-            >
+            <button type="button" className={`transition-choice px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${transitionMode === 'cold' ? 'active' : ''}`} onClick={() => setTransitionMode('cold')}>
               Cold Cut
             </button>
-            <button
-              type="button"
-              className={`transition-choice px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${transitionMode === 'fade' ? 'active' : ''
-                }`}
-              onClick={() => setTransitionMode('fade')}
-            >
+            <button type="button" className={`transition-choice px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${transitionMode === 'fade' ? 'active' : ''}`} onClick={() => setTransitionMode('fade')}>
               Fade
             </button>
           </div>
@@ -2284,7 +2411,12 @@ export function Studio() {
                 tip="Show or hide the connected phone camera behind the current text"
                 variant="ghost"
                 className={output.cameraEnabled ? 'panic-active' : ''}
-                onClick={() => setOutput((current) => ({ ...current, cameraEnabled: !current.cameraEnabled }))}
+                onClick={() =>
+                  setOutput((current) => ({
+                    ...current,
+                    cameraEnabled: !current.cameraEnabled,
+                  }))
+                }
               >
                 <Camera size={14} /> Phone Camera
               </Action>
@@ -2293,7 +2425,12 @@ export function Studio() {
               tip="Cut projector to Black (F1)"
               variant="ghost"
               className={output.mode === 'blackout' ? 'panic-active' : ''}
-              onClick={() => setOutput((o) => ({ ...o, mode: o.mode === 'blackout' ? 'normal' : 'blackout' }))}
+              onClick={() =>
+                setOutput((o) => ({
+                  ...o,
+                  mode: o.mode === 'blackout' ? 'normal' : 'blackout',
+                }))
+              }
             >
               <Square size={13} /> Blackout [F1]
             </Action>
@@ -2301,7 +2438,12 @@ export function Studio() {
               tip="Clear text, keep video background (F2)"
               variant="ghost"
               className={output.mode === 'clear' ? 'panic-active' : ''}
-              onClick={() => setOutput((o) => ({ ...o, mode: o.mode === 'clear' ? 'normal' : 'clear' }))}
+              onClick={() =>
+                setOutput((o) => ({
+                  ...o,
+                  mode: o.mode === 'clear' ? 'normal' : 'clear',
+                }))
+              }
             >
               <TextCursorInput size={14} /> Clear Text [F2]
             </Action>
@@ -2309,7 +2451,12 @@ export function Studio() {
               tip="Show church logo screen (F3)"
               variant="ghost"
               className={output.mode === 'logo' ? 'panic-active' : ''}
-              onClick={() => setOutput((o) => ({ ...o, mode: o.mode === 'logo' ? 'normal' : 'logo' }))}
+              onClick={() =>
+                setOutput((o) => ({
+                  ...o,
+                  mode: o.mode === 'logo' ? 'normal' : 'logo',
+                }))
+              }
             >
               <img src={logo.url} alt="" /> Logo [F3]
             </Action>
@@ -2325,9 +2472,7 @@ export function Studio() {
                 <Layers size={17} />
                 <h2>Resource Library</h2>
               </div>
-              <span className="count-badge">
-                {tab === 'Songs' ? String(librarySongs.length).padStart(2, '0') : 'KJV'}
-              </span>
+              <span className="count-badge">{tab === 'Songs' ? String(librarySongs.length).padStart(2, '0') : 'KJV'}</span>
             </div>
 
             <nav className="library-tabs">
@@ -2357,13 +2502,7 @@ export function Studio() {
                 <>
                   <label className="search-input">
                     <Search size={15} />
-                    <input
-                      ref={searchInput}
-                      aria-label="Search songs"
-                      placeholder="Find song or hymn…"
-                      value={search}
-                      onChange={(event) => setSearch(event.target.value)}
-                    />
+                    <input ref={searchInput} aria-label="Search songs" placeholder="Find song or hymn…" value={search} onChange={(event) => setSearch(event.target.value)} />
                     <kbd>⌘ K</kbd>
                   </label>
 
@@ -2403,13 +2542,20 @@ export function Studio() {
                       .map((item) => (
                         <div
                           key={`${item.kind ?? 'song'}:${item.title}`}
-                          className={`song-row flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${pendingLibrarySong?.title === item.title ? 'selected bg-primary/10 border border-primary/40' : 'hover:bg-white/5 border border-transparent'
-                            }`}
+                          className={`song-row flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${
+                            pendingLibrarySong?.title === item.title ? 'selected bg-primary/10 border border-primary/40' : 'hover:bg-white/5 border border-transparent'
+                          }`}
                           role="button"
                           tabIndex={0}
                           aria-label={`Select ${item.kind === 'sermon' ? 'sermon' : 'song'} ${item.title}; press Enter to load`}
                           onClick={() => setPendingLibrarySong(item)}
-                          onKeyDown={(event) => { if (event.target === event.currentTarget && event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); loadSong(item); } }}
+                          onKeyDown={(event) => {
+                            if (event.target === event.currentTarget && event.key === 'Enter') {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              loadSong(item);
+                            }
+                          }}
                         >
                           <div className="flex items-center gap-2.5 truncate">
                             <span className="song-icon text-primary">
@@ -2456,17 +2602,22 @@ export function Studio() {
                   <section className="public-hymn-search" aria-label="Public-domain hymn catalog">
                     <label className="search-input">
                       <Search size={15} />
-                      <input
-                        aria-label="Search public-domain hymns"
-                        placeholder="Search public-domain hymns…"
-                        value={publicHymnQuery}
-                        onChange={(event) => setPublicHymnQuery(event.target.value)}
-                      />
+                      <input aria-label="Search public-domain hymns" placeholder="Search public-domain hymns…" value={publicHymnQuery} onChange={(event) => setPublicHymnQuery(event.target.value)} />
                     </label>
-                    {publicHymnSearchState === 'searching' && <p className="public-hymn-status" role="status">Searching bundled hymns…</p>}
-                    {publicHymnSearchState === 'error' && <p className="public-hymn-status" role="alert">The bundled hymn catalog could not be loaded.</p>}
+                    {publicHymnSearchState === 'searching' && (
+                      <p className="public-hymn-status" role="status">
+                        Searching bundled hymns…
+                      </p>
+                    )}
+                    {publicHymnSearchState === 'error' && (
+                      <p className="public-hymn-status" role="alert">
+                        The bundled hymn catalog could not be loaded.
+                      </p>
+                    )}
                     {publicHymnQuery.trim().length >= 2 && publicHymnSearchState === 'idle' && publicHymnResults.length === 0 && (
-                      <p className="public-hymn-status" role="status">No public-domain hymns found.</p>
+                      <p className="public-hymn-status" role="status">
+                        No public-domain hymns found.
+                      </p>
                     )}
                     {publicHymnResults.map((hymn) => (
                       <article className="public-hymn-result" key={hymn.id}>
@@ -2517,7 +2668,11 @@ export function Studio() {
                     ))}
                   </div>
 
-                  {lookupError && <p className="scripture-lookup-error" role="alert">{lookupError}</p>}
+                  {lookupError && (
+                    <p className="scripture-lookup-error" role="alert">
+                      {lookupError}
+                    </p>
+                  )}
 
                   <div className="scripture-search-wrap">
                     <label className="search-input">
@@ -2528,7 +2683,11 @@ export function Studio() {
                         placeholder="e.g. for god so loved, or John 3:16"
                         value={scriptureSearchQuery}
                         onFocus={() => setScriptureSearchOpen(true)}
-                        onChange={(e) => { setScriptureSearchQuery(e.target.value); setScriptureSearchOpen(true); setActiveSearchResult(0); }}
+                        onChange={(e) => {
+                          setScriptureSearchQuery(e.target.value);
+                          setScriptureSearchOpen(true);
+                          setActiveSearchResult(0);
+                        }}
                         onKeyDown={(e) => {
                           if (e.key === 'ArrowDown' && scriptureSearchResults.length) {
                             e.preventDefault();
@@ -2548,10 +2707,14 @@ export function Studio() {
                     </label>
 
                     {scriptureSearchOpen && isSearchingScripture && (
-                      <div className="scripture-results-dropdown" role="status">Searching all 66 Bible books…</div>
+                      <div className="scripture-results-dropdown" role="status">
+                        Searching all 66 Bible books…
+                      </div>
                     )}
                     {scriptureSearchOpen && !isSearchingScripture && scriptureSearchQuery.trim().length >= 2 && scriptureSearchResults.length === 0 && (
-                      <div className="scripture-results-dropdown" role="status">No matching verses found.</div>
+                      <div className="scripture-results-dropdown" role="status">
+                        No matching verses found.
+                      </div>
                     )}
                     {scriptureSearchOpen && scriptureSearchResults.length > 0 && (
                       <div className="scripture-results-dropdown" role="listbox" aria-label="Bible verse search results">
@@ -2612,11 +2775,7 @@ export function Studio() {
                           }
                         }}
                       />
-                      {bookFocused && matchingBooks(book).length > 0 && matchingBooks(book)[0]?.toLowerCase() !== book.toLowerCase() && (
-                        <span className="book-autocomplete-ghost">
-                          ↵ {matchingBooks(book)[0]}
-                        </span>
-                      )}
+                      {bookFocused && matchingBooks(book).length > 0 && matchingBooks(book)[0]?.toLowerCase() !== book.toLowerCase() && <span className="book-autocomplete-ghost">↵ {matchingBooks(book)[0]}</span>}
                       {bookFocused && bookMatches.length > 0 && (
                         <div className="book-matches">
                           {bookMatches.map((name) => (
@@ -2697,7 +2856,7 @@ export function Studio() {
                         const maxV = getMaxVerses(book, chapter || '1');
                         const inlineIndices = parseVerseRange(val, maxV);
                         if (inlineIndices) {
-                          const numbers = inlineIndices.map(i => i + 1);
+                          const numbers = inlineIndices.map((i) => i + 1);
                           setHighlightedVerses(numbers);
                           revealSelectedVerses(numbers);
                         } else {
@@ -2723,8 +2882,7 @@ export function Studio() {
                           setActiveFocus('preview');
                           e.currentTarget.blur();
                           return;
-                        }
-                        else if (e.key === 'ArrowLeft' && e.currentTarget.selectionStart === 0) {
+                        } else if (e.key === 'ArrowLeft' && e.currentTarget.selectionStart === 0) {
                           e.preventDefault();
                           focusAndSelect(chapterInput.current);
                         }
@@ -2736,33 +2894,26 @@ export function Studio() {
                     <div className="sequence-panel-header">
                       <h4>
                         <BookOpen size={13} className="text-primary" />
-                        <span>{book} {chapter} SEQUENCE</span>
-                        <span className="text-muted-foreground font-normal text-[9px]">
-                          ({highlightedVerses.length} selected)
+                        <span>
+                          {book} {chapter} SEQUENCE
                         </span>
+                        <span className="text-muted-foreground font-normal text-[9px]">({highlightedVerses.length} selected)</span>
                       </h4>
                       <div className="sequence-panel-actions">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 text-[10px] px-2 text-muted-foreground hover:text-foreground"
-                          onClick={() => setHighlightedVerses([])}
-                        >
+                        <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 text-muted-foreground hover:text-foreground" onClick={() => setHighlightedVerses([])}>
                           Clear
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 text-[10px] px-2 text-primary"
-                          onClick={() => setHighlightedVerses(sequenceVerses.map((v) => v.verseNumber))}
-                        >
+                        <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 text-primary" onClick={() => setHighlightedVerses(sequenceVerses.map((v) => v.verseNumber))}>
                           All
                         </Button>
                         <Button
                           size="sm"
                           className="accent-action h-6 text-[10px] px-2.5 font-semibold"
                           disabled={!highlightedVerses.length}
-                          onClick={() => { setActiveFocus('preview'); displayHighlightedVerses(autoPush); }}
+                          onClick={() => {
+                            setActiveFocus('preview');
+                            displayHighlightedVerses(autoPush);
+                          }}
                         >
                           Display [↵]
                         </Button>
@@ -2771,9 +2922,7 @@ export function Studio() {
 
                     <div className="sequence-verse-list">
                       {sequenceVerses.length === 0 ? (
-                        <div className="p-3 text-center text-muted-foreground text-xs">
-                          Loading chapter sequence...
-                        </div>
+                        <div className="p-3 text-center text-muted-foreground text-xs">Loading chapter sequence...</div>
                       ) : (
                         sequenceVerses.map((item) => {
                           const isHighlighted = highlightedVerses.includes(item.verseNumber);
@@ -2794,9 +2943,6 @@ export function Studio() {
                       )}
                     </div>
                   </div>
-
-
-
                 </>
               )}
 
@@ -2805,15 +2951,24 @@ export function Studio() {
                   <div className="active-backgrounds-grid">
                     <div className="active-background-card">
                       {scriptureBackgroundType === 'video' ? <video src={scriptureBackground} autoPlay loop muted playsInline /> : <img src={scriptureBackground} alt="" />}
-                      <div><span>ACTIVE SCRIPTURE BACKGROUND</span><strong>{scriptureBackground.split('/').pop()}</strong></div>
+                      <div>
+                        <span>ACTIVE SCRIPTURE BACKGROUND</span>
+                        <strong>{scriptureBackground.split('/').pop()}</strong>
+                      </div>
                     </div>
                     <div className="active-background-card">
                       {mediaBackgroundType === 'video' ? <video src={mediaBackground} autoPlay loop muted playsInline /> : <img src={mediaBackground} alt="" />}
-                      <div><span>ACTIVE SONG / SERMON BACKGROUND</span><strong>{mediaBackground.split('/').pop()}</strong></div>
+                      <div>
+                        <span>ACTIVE SONG / SERMON BACKGROUND</span>
+                        <strong>{mediaBackground.split('/').pop()}</strong>
+                      </div>
                     </div>
                   </div>
                   <div className="background-dim-control">
-                    <div className="background-dim-heading"><strong>Background dim</strong><span>{backgroundDim}%</span></div>
+                    <div className="background-dim-heading">
+                      <strong>Background dim</strong>
+                      <span>{backgroundDim}%</span>
+                    </div>
                     <div className="background-dim-options" role="group" aria-label="Background dim level">
                       {[0, 25, 50, 75, 100].map((level) => (
                         <button key={level} type="button" aria-pressed={backgroundDim === level} onClick={() => setAndSaveBackgroundDim(level)}>
@@ -2827,31 +2982,52 @@ export function Studio() {
                     scheduleMedia={activeScheduleMedia}
                     onResolveMissingMedia={async (item, file) => {
                       await replaceMediaFile(item, file);
-                      setMediaDeckSlides((current) => current.map((slide) => (
-                        slide.mediaUrl === `local-background:${item.id}`
-                          ? { ...slide, mediaRevision: Date.now() }
-                          : slide
-                      )));
-                      setActiveScheduleMedia((current) => current ? {
-                        ...current,
-                        media: current.media.map((saved) => saved.id === item.id
-                          ? { ...saved, mimeType: file.type, size: file.size }
-                          : saved),
-                      } : current);
+                      setMediaDeckSlides((current) => current.map((slide) => (slide.mediaUrl === `local-background:${item.id}` ? { ...slide, mediaRevision: Date.now() } : slide)));
+                      setActiveScheduleMedia((current) =>
+                        current
+                          ? {
+                              ...current,
+                              media: current.media.map((saved) =>
+                                saved.id === item.id
+                                  ? {
+                                      ...saved,
+                                      mimeType: file.type,
+                                      size: file.size,
+                                    }
+                                  : saved,
+                              ),
+                            }
+                          : current,
+                      );
                       setIsDirty(true);
                     }}
                   />
                   <div className="rounded-lg border border-white/10 bg-black/10 p-3 flex flex-col gap-2">
                     <SectionLabel icon={<Link2 size={14} />}>ONLINE MEDIA</SectionLabel>
                     <div className="flex gap-2">
-                      <input aria-label="YouTube URL" value={youtubeMediaUrl} onChange={(e) => setYoutubeMediaUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addYoutubeMedia(); } }} placeholder="Paste YouTube / live URL" className="min-w-0 flex-1 h-9 rounded-md border border-white/15 bg-black/40 px-2 text-xs text-white outline-none focus:border-primary" />
-                      <Button aria-label="Add YouTube media" title="Add YouTube media to deck" className="accent-action h-9 px-3" onClick={addYoutubeMedia}><Link2 size={14} /></Button>
+                      <input
+                        aria-label="YouTube URL"
+                        value={youtubeMediaUrl}
+                        onChange={(e) => setYoutubeMediaUrl(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addYoutubeMedia();
+                          }
+                        }}
+                        placeholder="Paste YouTube / live URL"
+                        className="min-w-0 flex-1 h-9 rounded-md border border-white/15 bg-black/40 px-2 text-xs text-white outline-none focus:border-primary"
+                      />
+                      <Button aria-label="Add YouTube media" title="Add YouTube media to deck" className="accent-action h-9 px-3" onClick={addYoutubeMedia}>
+                        <Link2 size={14} />
+                      </Button>
                     </div>
                     <Button variant="outline" className="accent-action w-full h-9 text-xs" onClick={() => setIsMediaExplorerOpen(true)}>
                       <ImageIcon size={14} className="mr-1.5" /> Choose Local Stills & Motion Loops
                     </Button>
                     {(() => {
-                      const selectedMedia = mediaDeckSlides[selectedMediaDeckIdx ?? selected]; return selectedMedia?.mediaUrl && (selectedMedia.mediaType === 'video' || selectedMedia.mediaType === 'youtube') ? (
+                      const selectedMedia = mediaDeckSlides[selectedMediaDeckIdx ?? selected];
+                      return selectedMedia?.mediaUrl && (selectedMedia.mediaType === 'video' || selectedMedia.mediaType === 'youtube') ? (
                         <Button variant="outline" className="w-full h-8 text-xs" onClick={toggleSelectedMediaAudio}>
                           {(selectedMedia.audioMuted ?? true) ? <VolumeX size={14} className="mr-1.5" /> : <Volume2 size={14} className="mr-1.5" />}
                           {(selectedMedia.audioMuted ?? true) ? 'Unmute selected media' : 'Mute selected media'}
@@ -2866,7 +3042,11 @@ export function Studio() {
                 <div className="flex flex-col gap-2">
                   <Button
                     className="accent-action w-full h-9 justify-center gap-2 font-semibold"
-                    onClick={() => { setNewScheduleName(''); setNewScheduleError(''); setNewScheduleOpen(true); }}
+                    onClick={() => {
+                      setNewScheduleName('');
+                      setNewScheduleError('');
+                      setNewScheduleOpen(true);
+                    }}
                   >
                     <Plus size={14} /> New Schedule
                   </Button>
@@ -2896,33 +3076,27 @@ export function Studio() {
 
           {/* Center Column: Open View Space */}
           <div className="flex-1 flex flex-col gap-3 min-w-0 h-full overflow-hidden">
-
             {/* 🎵 HORIZONTAL SCROLLABLE PRESENTATION DECK WITH EXCLUSIVE FOCUS */}
             <div
               ref={deckPaneRef}
               tabIndex={0}
               onClick={() => setActiveFocus('deck')}
               onFocus={() => setActiveFocus('deck')}
-              className={`media-presentation-timeline-pane bg-neutral-900/90 border rounded-xl p-2 flex flex-col gap-2 w-full shrink-0 shadow-lg transition-all outline-none ${activeFocus === 'deck' ? 'border-primary ring-1 ring-primary/40 shadow-[0_0_12px_rgba(0,242,254,0.15)]' : 'border-white/10'
-                }`}
+              className={`media-presentation-timeline-pane bg-neutral-900/90 border rounded-xl p-2 flex flex-col gap-2 w-full shrink-0 shadow-lg transition-all outline-none ${
+                activeFocus === 'deck' ? 'border-primary ring-1 ring-primary/40 shadow-[0_0_12px_rgba(0,242,254,0.15)]' : 'border-white/10'
+              }`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-bold text-primary tracking-wider uppercase">
-                    Presentation Deck · {(mediaDeckSlides[selectedMediaDeckIdx ?? selected]?.title) || (mediaDeckSlides.length ? 'Presentation' : 'No items loaded')}
+                    Presentation Deck · {mediaDeckSlides[selectedMediaDeckIdx ?? selected]?.title || (mediaDeckSlides.length ? 'Presentation' : 'No items loaded')}
                   </span>
-                  {activeFocus === 'deck' && (
-                    <span className="text-[9px] font-bold bg-primary/20 text-primary px-1.5 py-0.5 rounded uppercase tracking-wider">
-                      FOCUSED · ARROW KEYS ACTIVE
-                    </span>
-                  )}
+                  {activeFocus === 'deck' && <span className="text-[9px] font-bold bg-primary/20 text-primary px-1.5 py-0.5 rounded uppercase tracking-wider">FOCUSED · ARROW KEYS ACTIVE</span>}
                 </div>
 
                 {/* Fixed Manual Navigation Buttons for Deck */}
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-slate-400 mr-1">
-                    ({mediaDeckSlides.length} items loaded)
-                  </span>
+                  <span className="text-[10px] text-slate-400 mr-1">({mediaDeckSlides.length} items loaded)</span>
                   <Button
                     variant="outline"
                     size="sm"
@@ -2951,7 +3125,10 @@ export function Studio() {
                     variant="ghost"
                     size="sm"
                     className="deck-reset-button h-6 text-[10px] px-2"
-                    onClick={(e) => { e.stopPropagation(); resetWorkspaceLayout(); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      resetWorkspaceLayout();
+                    }}
                     title="Restore the default deck and monitor layout"
                   >
                     <RotateCcw size={11} className="mr-1" /> Reset layout
@@ -2978,17 +3155,23 @@ export function Studio() {
                         loadPreview(slideItem);
                         if (autoPush) broadcast(slideItem);
                       }}
-                      className={`flex-none w-44 aspect-video rounded-md p-2 border cursor-pointer flex flex-col justify-between transition-all relative group ${isCurrentActive
-                        ? 'deck-card-active text-white'
-                        : 'bg-white/5 border-white/10 hover:bg-white/10 text-slate-300'
-                        }`}
+                      className={`flex-none w-44 aspect-video rounded-md p-2 border cursor-pointer flex flex-col justify-between transition-all relative group ${
+                        isCurrentActive ? 'deck-card-active text-white' : 'bg-white/5 border-white/10 hover:bg-white/10 text-slate-300'
+                      }`}
                     >
                       <div className="flex justify-between items-center">
-                        <span className="text-[9px] font-bold text-primary uppercase">
-                          {slideItem.label || `Verse ${index + 1}`}
-                        </span>
+                        <span className="text-[9px] font-bold text-primary uppercase">{slideItem.label || `Verse ${index + 1}`}</span>
 
-                        <button type="button" aria-label={`Remove ${slideItem.title} from deck`} title="Remove from deck" className="text-white/70 hover:text-white hover:bg-rose-500/80 rounded p-1" onClick={(e) => { e.stopPropagation(); removeDeckMedia(index); }}>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${slideItem.title} from deck`}
+                          title="Remove from deck"
+                          className="text-white/70 hover:text-white hover:bg-rose-500/80 rounded p-1"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeDeckMedia(index);
+                          }}
+                        >
                           <X size={12} />
                         </button>
                         {/* Inline Edit Trigger (Disabled on Scripture) */}
@@ -3010,24 +3193,18 @@ export function Studio() {
                       {slideItem.kind === 'media' && slideItem.mediaUrl ? (
                         <div className="my-1 flex min-h-0 flex-1 flex-col gap-1">
                           <DeckMediaThumbnail slide={slideItem} />
-                          <p className="truncate text-[10px] leading-tight text-slate-200" title={slideItem.title}>{slideItem.title}</p>
+                          <p className="truncate text-[10px] leading-tight text-slate-200" title={slideItem.title}>
+                            {slideItem.title}
+                          </p>
                         </div>
                       ) : (
-                        <p className="text-[11px] line-clamp-3 leading-snug my-1">
-                          {slideItem.text || '[Blank / Background Frame]'}
-                        </p>
+                        <p className="text-[11px] line-clamp-3 leading-snug my-1">{slideItem.text || '[Blank / Background Frame]'}</p>
                       )}
                     </div>
                   );
                 })}
               </div>
-              <div
-                className="deck-resize-handle"
-                role="separator"
-                aria-label="Resize presentation deck"
-                aria-orientation="horizontal"
-                onPointerDown={startDeckResize}
-              >
+              <div className="deck-resize-handle" role="separator" aria-label="Resize presentation deck" aria-orientation="horizontal" onPointerDown={startDeckResize}>
                 <span />
               </div>
             </div>
@@ -3039,20 +3216,11 @@ export function Studio() {
                   <span className="text-xs font-bold text-primary flex items-center gap-1.5">
                     <Edit2 size={13} /> Edit Slide Text Live & Save to Global Song
                   </span>
-                  <button
-                    type="button"
-                    className="text-xs text-slate-400 hover:text-white"
-                    onClick={() => setEditingSlideIdx(null)}
-                  >
+                  <button type="button" className="text-xs text-slate-400 hover:text-white" onClick={() => setEditingSlideIdx(null)}>
                     Cancel
                   </button>
                 </div>
-                <textarea
-                  className="w-full bg-black/60 border border-white/10 rounded p-2 text-xs text-white focus:outline-none focus:border-primary"
-                  rows={2}
-                  value={editingText}
-                  onChange={(e) => setEditingText(e.target.value)}
-                />
+                <textarea className="w-full bg-black/60 border border-white/10 rounded p-2 text-xs text-white focus:outline-none focus:border-primary" rows={2} value={editingText} onChange={(e) => setEditingText(e.target.value)} />
                 <div className="flex justify-end gap-2">
                   <Button size="sm" className="accent-action h-7 text-xs font-bold" onClick={saveSlideTypoFix}>
                     Apply Changes & Sync Global Song
@@ -3061,12 +3229,105 @@ export function Studio() {
               </div>
             )}
 
+            {__SELAH_EDITION__ === 'emerald' && (
+              <section className="emerald-mix-dock" aria-label="Emerald live mixer">
+                <div className="emerald-mix-heading">
+                  <div>
+                    <span className="emerald-overline">LIVE MIXER</span>
+                    <h2>Choose what the room sees</h2>
+                  </div>
+                  <span className={`emerald-source-status ${stagedCameraFrame ? 'connected' : ''}`}>
+                    <span />
+                    {stagedCameraFrame ? 'Source ready' : 'Waiting for camera'}
+                  </span>
+                </div>
+                <div className="emerald-mix-controls">
+                  <div className="emerald-source-tiles" aria-label="Camera source">
+                    <button type="button" className={`emerald-source-tile ${stagedCameraSource === 'phone' ? 'selected' : ''}`} onClick={() => setStagedCameraSource('phone')} aria-pressed={stagedCameraSource === 'phone'}>
+                      <span className="emerald-source-thumbnail">
+                        {cameraFrame ? <img src={cameraFrame} alt="" /> : <Camera size={19} />}
+                        <span className={`emerald-source-led ${cameraFrame ? 'ready' : ''}`} />
+                      </span>
+                      <span>
+                        <strong>Phone camera</strong>
+                        <small>{cameraFrame ? 'Connected over Wi-Fi' : 'Waiting for phone'}</small>
+                      </span>
+                    </button>
+                    <button type="button" className={`emerald-source-tile ${stagedCameraSource === 'hdmi' ? 'selected' : ''}`} onClick={() => setStagedCameraSource('hdmi')} aria-pressed={stagedCameraSource === 'hdmi'}>
+                      <span className="emerald-source-thumbnail">
+                        {hdmiFrame ? <img src={hdmiFrame} alt="" /> : <Monitor size={19} />}
+                        <span className={`emerald-source-led ${hdmiFrame ? 'ready' : ''}`} />
+                      </span>
+                      <span>
+                        <strong>USB HDMI capture</strong>
+                        <small>{hdmiFrame ? 'Capture feed ready' : 'Connect a UVC capture card'}</small>
+                      </span>
+                    </button>
+                  </div>
+                  <div className="emerald-mix-options">
+                    <div className="emerald-mode-picker" aria-label="Live composition">
+                      {(
+                        [
+                          ['mix', 'Feed + text'],
+                          ['feed', 'Feed only'],
+                          ['text', 'Text only'],
+                        ] as const
+                      ).map(([value, label]) => (
+                        <button type="button" key={value} className={stagedCameraMode === value ? 'selected' : ''} aria-pressed={stagedCameraMode === value} onClick={() => setStagedCameraMode(value)}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="emerald-marker-setting">
+                      <input type="checkbox" checked={showMarkers} onChange={(event) => setShowMarkers(event.target.checked)} />
+                      <span>Show section / verse markers</span>
+                    </label>
+                    {stagedCameraSource === 'hdmi' && (
+                      <label className="emerald-resolution-setting">
+                        <span>Capture detail</span>
+                        <select value={hdmiResolution} onChange={(event) => setHdmiResolution(Number(event.target.value) as 720 | 1080)}>
+                          <option value={720}>720p · Smooth</option>
+                          <option value={1080}>1080p · Detail</option>
+                        </select>
+                      </label>
+                    )}
+                  </div>
+                  <Button
+                    className="emerald-send-live"
+                    disabled={stagedCameraMode !== 'text' && !stagedCameraFrame}
+                    onClick={() =>
+                      setOutput((current) => ({
+                        ...current,
+                        slide: activeSlide,
+                        mode: 'normal',
+                        transitionMode,
+                        cameraEnabled: stagedCameraMode !== 'text',
+                        cameraSource: stagedCameraSource,
+                        cameraMode: stagedCameraMode,
+                        showMarkers,
+                      }))
+                    }
+                  >
+                    <Radio size={15} /> Send mix Live
+                  </Button>
+                </div>
+                {(stagedCameraSource === 'hdmi' || (output.cameraEnabled && output.cameraSource === 'hdmi')) && (
+                  <EmeraldCameraInput
+                    active={stagedCameraSource === 'hdmi' || (output.cameraEnabled === true && output.cameraSource === 'hdmi')}
+                    resolution={hdmiResolution}
+                    frame={hdmiFrame}
+                  />
+                )}
+              </section>
+            )}
+
             {/* Center Stage: DUAL WORKSTATION */}
             <section className="dual-workstation flex-1 grid grid-cols-2 gap-3 w-full min-h-0">
               {/* Left: PREVIEW MONITOR */}
               <div
-                className={`monitor-card flex flex-col h-full rounded-xl border bg-neutral-900/80 p-2 transition-all outline-none ${activeFocus === 'preview' ? 'border-primary ring-1 ring-primary/40 shadow-[0_0_12px_rgba(0,242,254,0.15)]' : 'border-white/10'
-                  }`}
+                className={`monitor-card flex flex-col h-full rounded-xl border bg-neutral-900/80 p-2 transition-all outline-none ${
+                  activeFocus === 'preview' ? 'border-primary ring-1 ring-primary/40 shadow-[0_0_12px_rgba(0,242,254,0.15)]' : 'border-white/10'
+                }`}
                 tabIndex={0}
                 onClick={() => setActiveFocus('preview')}
                 onFocus={() => setActiveFocus('preview')}
@@ -3079,35 +3340,29 @@ export function Studio() {
                       ({mediaDeckSlides.length ? (selectedMediaDeckIdx ?? selected) + 1 : 0}/{mediaDeckSlides.length})
                     </small>
                   </h3>
-                  {activeFocus === 'preview' && (
-                    <span className="text-[8px] font-bold bg-primary/20 text-primary px-1.5 py-0.5 rounded uppercase">
-                      FOCUSED
-                    </span>
-                  )}
+                  {activeFocus === 'preview' && <span className="text-[8px] font-bold bg-primary/20 text-primary px-1.5 py-0.5 rounded uppercase">FOCUSED</span>}
                 </div>
 
                 <div className="monitor-screen-wrap flex-1 flex items-center justify-center bg-black/60 rounded-md overflow-hidden p-1">
-                  <SlideScreen slide={activeSlide} preview transitionMode={transitionMode} backgroundDim={backgroundDim} mediaRevision={activeSlide.mediaRevision ?? 0} />
+                  <SlideScreen
+                    slide={activeSlide}
+                    preview
+                    transitionMode={transitionMode}
+                    backgroundDim={backgroundDim}
+                    cameraFrame={stagedCameraFrame}
+                    cameraEnabled={stagedCameraMode !== 'text'}
+                    cameraMode={stagedCameraMode}
+                    showMarkers={showMarkers}
+                    mediaRevision={activeSlide.mediaRevision ?? 0}
+                  />
                 </div>
 
                 <div className="monitor-footer py-1 px-1 flex items-center justify-between mt-2">
                   <div className="monitor-nav-btns flex gap-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 text-[11px] px-2"
-                      disabled={(selectedMediaDeckIdx ?? selected) <= 0}
-                      onClick={() => stepDeck(-1)}
-                    >
+                    <Button variant="outline" size="sm" className="h-6 text-[11px] px-2" disabled={(selectedMediaDeckIdx ?? selected) <= 0} onClick={() => stepDeck(-1)}>
                       <ArrowLeft size={11} className="mr-1" /> Prev
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 text-[11px] px-2"
-                      disabled={(selectedMediaDeckIdx ?? selected) >= mediaDeckSlides.length - 1}
-                      onClick={() => stepDeck(1)}
-                    >
+                    <Button variant="outline" size="sm" className="h-6 text-[11px] px-2" disabled={(selectedMediaDeckIdx ?? selected) >= mediaDeckSlides.length - 1} onClick={() => stepDeck(1)}>
                       Next <ArrowRight size={11} className="ml-1" />
                     </Button>
                   </div>
@@ -3120,8 +3375,9 @@ export function Studio() {
 
               {/* Right: PROJECTOR OUTPUT */}
               <div
-                className={`monitor-card live-monitor flex flex-col h-full rounded-xl border bg-neutral-900/80 p-2 transition-all outline-none ${activeFocus === 'live' ? 'border-red-500 ring-1 ring-red-500/40 shadow-[0_0_12px_rgba(239,68,68,0.15)]' : 'border-white/10'
-                  }`}
+                className={`monitor-card live-monitor flex flex-col h-full rounded-xl border bg-neutral-900/80 p-2 transition-all outline-none ${
+                  activeFocus === 'live' ? 'border-red-500 ring-1 ring-red-500/40 shadow-[0_0_12px_rgba(239,68,68,0.15)]' : 'border-white/10'
+                }`}
                 tabIndex={0}
                 onClick={() => setActiveFocus('live')}
                 onFocus={() => setActiveFocus('live')}
@@ -3133,11 +3389,7 @@ export function Studio() {
                     <small className="text-slate-400 font-normal">({outputName})</small>
                   </h3>
                   <div className="flex items-center gap-2">
-                    {activeFocus === 'live' && (
-                      <span className="text-[8px] font-bold bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded uppercase">
-                        FOCUSED
-                      </span>
-                    )}
+                    {activeFocus === 'live' && <span className="text-[8px] font-bold bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded uppercase">FOCUSED</span>}
                     <Switch
                       className="accent-live-toggle"
                       checked={autoPush}
@@ -3153,27 +3405,25 @@ export function Studio() {
                 </div>
 
                 <div className="monitor-screen-wrap flex-1 flex items-center justify-center bg-black/60 rounded-md overflow-hidden p-1">
-                  <SlideScreen slide={output.slide} mode={output.mode} transitionMode={output.transitionMode ?? transitionMode} backgroundDim={output.backgroundDim ?? backgroundDim} cameraFrame={cameraFrame} cameraEnabled={output.cameraEnabled} mediaRevision={output.slide.mediaRevision ?? 0} />
+                  <SlideScreen
+                    slide={output.slide}
+                    mode={output.mode}
+                    transitionMode={output.transitionMode ?? transitionMode}
+                    backgroundDim={output.backgroundDim ?? backgroundDim}
+                    cameraFrame={liveCameraFrame}
+                    cameraEnabled={output.cameraEnabled}
+                    cameraMode={output.cameraMode}
+                    showMarkers={output.showMarkers}
+                    mediaRevision={output.slide.mediaRevision ?? 0}
+                  />
                 </div>
 
                 <div className="monitor-footer py-1 px-1 flex items-center justify-between mt-2">
                   <div className="monitor-nav-btns flex gap-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 text-[11px] px-2"
-                      disabled={(selectedMediaDeckIdx ?? selected) <= 0}
-                      onClick={() => stepDeck(-1)}
-                    >
+                    <Button variant="outline" size="sm" className="h-6 text-[11px] px-2" disabled={(selectedMediaDeckIdx ?? selected) <= 0} onClick={() => stepDeck(-1)}>
                       <ArrowLeft size={11} className="mr-1" /> Prev Live
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 text-[11px] px-2"
-                      disabled={(selectedMediaDeckIdx ?? selected) >= mediaDeckSlides.length - 1}
-                      onClick={() => stepDeck(1)}
-                    >
+                    <Button variant="outline" size="sm" className="h-6 text-[11px] px-2" disabled={(selectedMediaDeckIdx ?? selected) >= mediaDeckSlides.length - 1} onClick={() => stepDeck(1)}>
                       Next Live <ArrowRight size={11} className="ml-1" />
                     </Button>
                   </div>
@@ -3202,63 +3452,29 @@ export function Studio() {
         {isMediaExplorerOpen && (
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
             <div className="bg-neutral-900 border border-white/10 rounded-xl p-5 w-full max-w-5xl max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
-
               {/* Hidden File Inputs */}
-              <input
-                ref={scriptureMotionInputRef}
-                type="file"
-                accept="video/mp4,video/webm"
-                className="hidden"
-                onChange={(e) => handleUploadScriptureAsset(e, 'video')}
-              />
-              <input
-                ref={scriptureStillInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => handleUploadScriptureAsset(e, 'image')}
-              />
-              <input
-                ref={mediaMotionInputRef}
-                type="file"
-                accept="video/mp4,video/webm"
-                className="hidden"
-                onChange={(e) => handleUploadMediaAsset(e, 'video')}
-              />
-              <input
-                ref={mediaStillInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => handleUploadMediaAsset(e, 'image')}
-              />
+              <input ref={scriptureMotionInputRef} type="file" accept="video/mp4,video/webm" className="hidden" onChange={(e) => handleUploadScriptureAsset(e, 'video')} />
+              <input ref={scriptureStillInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleUploadScriptureAsset(e, 'image')} />
+              <input ref={mediaMotionInputRef} type="file" accept="video/mp4,video/webm" className="hidden" onChange={(e) => handleUploadMediaAsset(e, 'video')} />
+              <input ref={mediaStillInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleUploadMediaAsset(e, 'image')} />
 
               {/* Modal Sticky Header */}
               <div className="flex justify-between items-center border-b border-white/10 pb-3 mb-3 shrink-0">
                 <div className="flex items-center gap-2">
                   <ImageIcon size={18} className="text-primary" />
-                  <h3 className="text-sm font-bold text-slate-100 tracking-wide">
-                    SELAH BACKGROUND MEDIA LIBRARY
-                  </h3>
+                  <h3 className="text-sm font-bold text-slate-100 tracking-wide">SELAH BACKGROUND MEDIA LIBRARY</h3>
                 </div>
-                <button
-                  type="button"
-                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
-                  onClick={() => setIsMediaExplorerOpen(false)}
-                >
+                <button type="button" className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors" onClick={() => setIsMediaExplorerOpen(false)}>
                   <X size={20} />
                 </button>
               </div>
 
               {/* Internal Scrollable Content */}
               <div className="grid grid-cols-1 gap-6 overflow-y-auto pr-2 flex-1 scrollbar-thin background-library-scroll" onScroll={handleBackgroundScroll}>
-
                 {/* ==================== SONG / SERMON COLUMN ==================== */}
                 <div className="flex flex-col gap-4">
                   <div className="sticky top-0 bg-neutral-900/95 py-2 z-10 border-b border-white/10 flex justify-between items-center">
-                    <span className="text-xs font-bold text-primary uppercase tracking-wider">
-                      Local Backgrounds · Assign by display
-                    </span>
+                    <span className="text-xs font-bold text-primary uppercase tracking-wider">Local Backgrounds · Assign by display</span>
                   </div>
 
                   {/* Song/Sermon Motions Section */}
@@ -3274,9 +3490,7 @@ export function Studio() {
                         </Button>
                       </div>
                     </div>
-                    <div className="background-library-grid">
-                      {availableBackgrounds.filter((asset) => asset.type === 'video').map(renderBackgroundCard)}
-                    </div>
+                    <div className="background-library-grid">{availableBackgrounds.filter((asset) => asset.type === 'video').map(renderBackgroundCard)}</div>
                   </div>
 
                   {/* Song/Sermon Stills Section */}
@@ -3292,17 +3506,20 @@ export function Studio() {
                         </Button>
                       </div>
                     </div>
-                    <div className="background-library-grid">
-                      {availableBackgrounds.filter((asset) => asset.type === 'image').map(renderBackgroundCard)}
-                    </div>
+                    <div className="background-library-grid">{availableBackgrounds.filter((asset) => asset.type === 'image').map(renderBackgroundCard)}</div>
                   </div>
                 </div>
-
               </div>
             </div>
           </div>
         )}
-        <Dialog open={newScheduleOpen} onOpenChange={(open) => { setNewScheduleOpen(open); if (!open) setNewScheduleError(''); }}>
+        <Dialog
+          open={newScheduleOpen}
+          onOpenChange={(open) => {
+            setNewScheduleOpen(open);
+            if (!open) setNewScheduleError('');
+          }}
+        >
           <DialogContent className="schedule-create-dialog">
             <DialogHeader>
               <DialogTitle>Start a new schedule</DialogTitle>
@@ -3313,16 +3530,32 @@ export function Studio() {
               <input
                 autoFocus
                 value={newScheduleName}
-                onChange={(event) => { setNewScheduleName(event.target.value); setNewScheduleError(''); }}
-                onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void createNewSchedule(); } }}
+                onChange={(event) => {
+                  setNewScheduleName(event.target.value);
+                  setNewScheduleError('');
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    void createNewSchedule();
+                  }
+                }}
                 placeholder="Sunday Worship Service"
                 aria-invalid={Boolean(newScheduleError)}
               />
             </label>
-            {newScheduleError && <p className="schedule-create-error" role="alert">{newScheduleError}</p>}
+            {newScheduleError && (
+              <p className="schedule-create-error" role="alert">
+                {newScheduleError}
+              </p>
+            )}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setNewScheduleOpen(false)}>Cancel</Button>
-              <Button onClick={() => void createNewSchedule()} disabled={!newScheduleName.trim()}>Create Schedule</Button>
+              <Button variant="outline" onClick={() => setNewScheduleOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={() => void createNewSchedule()} disabled={!newScheduleName.trim()}>
+                Create Schedule
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -3347,14 +3580,26 @@ export function Studio() {
         )}
 
         {deleteTargetSong && (
-          <div className="delete-confirm-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDeleteTargetSong(null); }}>
+          <div
+            className="delete-confirm-overlay"
+            role="presentation"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setDeleteTargetSong(null);
+            }}
+          >
             <section className="delete-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-song-title" aria-describedby="delete-song-description">
               <span className="delete-confirm-kicker">LIBRARY ACTION</span>
               <h2 id="delete-song-title">Delete {deleteTargetSong.kind === 'sermon' ? 'sermon' : 'song'}?</h2>
-              <p id="delete-song-description"><strong>{deleteTargetSong.title}</strong> will be removed from this device.</p>
+              <p id="delete-song-description">
+                <strong>{deleteTargetSong.title}</strong> will be removed from this device.
+              </p>
               <div className="delete-confirm-actions">
-                <Button variant="ghost" onClick={() => setDeleteTargetSong(null)}>Keep it</Button>
-                <Button variant="destructive" onClick={confirmDeleteSong}>Delete {deleteTargetSong.kind === 'sermon' ? 'sermon' : 'song'}</Button>
+                <Button variant="ghost" onClick={() => setDeleteTargetSong(null)}>
+                  Keep it
+                </Button>
+                <Button variant="destructive" onClick={confirmDeleteSong}>
+                  Delete {deleteTargetSong.kind === 'sermon' ? 'sermon' : 'song'}
+                </Button>
               </div>
             </section>
           </div>
@@ -3381,23 +3626,20 @@ export function Studio() {
               <SheetTitle>Studio Preferences</SheetTitle>
               <SheetDescription>Configure displays, themes, and presentation behavior.</SheetDescription>
             </SheetHeader>
-            <div className="settings-section">
-              <SectionLabel>APPEARANCE ACCENT</SectionLabel>
-              <div className="settings-themes">
-                {accents.map(([value, label]) => (
-                  <Button
-                    key={value}
-                    variant="outline"
-                    className={theme === value ? 'selected-theme' : ''}
-                    onClick={() => setTheme(value)}
-                  >
-                    <span className={`color-dot swatch-${value}`} />
-                    {label}
-                    {theme === value && <Check size={13} />}
-                  </Button>
-                ))}
+            {__SELAH_EDITION__ !== 'emerald' && (
+              <div className="settings-section">
+                <SectionLabel>APPEARANCE ACCENT</SectionLabel>
+                <div className="settings-themes">
+                  {accents.map(([value, label]) => (
+                    <Button key={value} variant="outline" className={theme === value ? 'selected-theme' : ''} onClick={() => setTheme(value)}>
+                      <span className={`color-dot swatch-${value}`} />
+                      {label}
+                      {theme === value && <Check size={13} />}
+                    </Button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
             <div className="settings-section">
               <SectionLabel>OUTPUT DISPLAY</SectionLabel>
               <label htmlFor="output-name">Audience Display Name</label>
@@ -3406,10 +3648,7 @@ export function Studio() {
             <div className="settings-section">
               <SectionLabel>OFFLINE BIBLE ENGINE</SectionLabel>
               <p>King James Version (KJV) 66-book offline archive is active and indexed locally.</p>
-              <p role="status">
-                Storage:{' '}
-                {savedState === 'error' ? 'Storage warning' : 'Verified and active on this computer'}
-              </p>
+              <p role="status">Storage: {savedState === 'error' ? 'Storage warning' : 'Verified and active on this computer'}</p>
             </div>
             <Button
               className="wide-button"
@@ -3437,11 +3676,15 @@ export function Studio() {
                   return <Icon size={28} />;
                 })()}
               </span>
-              <span className="eyebrow">OPERATOR GUIDE | {guideStep + 1} OF {guideSteps.length}</span>
+              <span className="eyebrow">
+                OPERATOR GUIDE | {guideStep + 1} OF {guideSteps.length}
+              </span>
               <h3>{guideSteps[guideStep]?.title}</h3>
               <p>{guideSteps[guideStep]?.copy}</p>
               <ul>
-                {guideSteps[guideStep]?.actions.map((action) => <li key={action}>{action}</li>)}
+                {guideSteps[guideStep]?.actions.map((action) => (
+                  <li key={action}>{action}</li>
+                ))}
               </ul>
             </div>
             <div className="guide-progress">
@@ -3467,7 +3710,9 @@ export function Studio() {
 export function Projector() {
   const [output, setOutput] = useState<OutputState>(createStartupOutput);
   const [cameraFrame, setCameraFrame] = useState<string>();
-  const accentTheme = output.accentTheme && output.accentTheme in projectorAccentColors ? output.accentTheme : 'teal';
+  const [hdmiFrame, setHdmiFrame] = useState<string>();
+  const cameraFrameToShow = output.cameraSource === 'hdmi' ? hdmiFrame : cameraFrame;
+  const accentTheme = __SELAH_EDITION__ === 'emerald' ? 'teal' : output.accentTheme && output.accentTheme in projectorAccentColors ? output.accentTheme : 'teal';
 
   useEffect(() => {
     if (!isTauri() || __SELAH_EDITION__ !== 'emerald') return;
@@ -3479,9 +3724,17 @@ export function Projector() {
       } catch (error) {
         console.error('Could not refresh the projector camera feed.', error);
       }
+      try {
+        const frame = await invoke<string | null>('get_latest_hdmi_camera_frame');
+        if (active) setHdmiFrame(frame ?? undefined);
+      } catch (error) {
+        console.error('Could not refresh the projector HDMI feed.', error);
+      }
     };
     void refreshCameraFrame();
-    const timer = window.setInterval(() => { void refreshCameraFrame(); }, 120);
+    const timer = window.setInterval(() => {
+      void refreshCameraFrame();
+    }, 120);
     return () => {
       active = false;
       window.clearInterval(timer);
@@ -3491,9 +3744,10 @@ export function Projector() {
   useEffect(() => {
     const bc = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('selah_projector_channel');
     const requestCurrentOutput = () => postChannelMessage(bc, { type: 'request' });
-    if (bc) bc.onmessage = (event) => {
-      if (event.data?.type === 'output' && event.data.output?.slide) setOutput(event.data.output);
-    };
+    if (bc)
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'output' && event.data.output?.slide) setOutput(event.data.output);
+      };
     requestCurrentOutput();
     window.addEventListener('focus', requestCurrentOutput);
     window.addEventListener('pageshow', requestCurrentOutput);
@@ -3507,8 +3761,25 @@ export function Projector() {
   }, []);
 
   return (
-    <div className="projector-view" style={{ '--primary': projectorAccentColors[accentTheme] } as CSSProperties}>
-      <SlideScreen slide={output.slide} mode={output.mode} transitionMode={output.transitionMode ?? "blur-words"} backgroundDim={output.backgroundDim ?? 50} cameraFrame={cameraFrame} cameraEnabled={output.cameraEnabled} mediaRevision={output.slide.mediaRevision ?? 0} />
+    <div
+      className="projector-view"
+      style={
+        {
+          '--primary': __SELAH_EDITION__ === 'emerald' ? '#35cf78' : projectorAccentColors[accentTheme],
+        } as CSSProperties
+      }
+    >
+      <SlideScreen
+        slide={output.slide}
+        mode={output.mode}
+        transitionMode={output.transitionMode ?? 'blur-words'}
+        backgroundDim={output.backgroundDim ?? 50}
+        cameraFrame={cameraFrameToShow}
+        cameraEnabled={output.cameraEnabled}
+        cameraMode={output.cameraMode}
+        showMarkers={output.showMarkers}
+        mediaRevision={output.slide.mediaRevision ?? 0}
+      />
       <Button
         variant="ghost"
         size="icon"
@@ -3516,7 +3787,7 @@ export function Projector() {
         aria-label="Enter fullscreen"
         title="Enter fullscreen"
         onClick={() => {
-          if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => { });
+          if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
           else document.exitFullscreen();
         }}
       >

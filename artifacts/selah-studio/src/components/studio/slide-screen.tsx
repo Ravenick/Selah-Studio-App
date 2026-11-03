@@ -67,11 +67,7 @@ function animateTextNodes(node: ReactNode, keyPrefix = 'word'): ReactNode {
   return node;
 }
 
-function wrapWordsWithBlur(
-  node: React.ReactNode,
-  counter = { count: 0 },
-  staggerMs = 35
-): React.ReactNode {
+function wrapWordsWithBlur(node: React.ReactNode, counter = { count: 0 }, staggerMs = 35): React.ReactNode {
   if (node === null || node === undefined || typeof node === 'boolean') {
     return node;
   }
@@ -90,7 +86,11 @@ function wrapWordsWithBlur(
         <span
           key={`word-${currentWordIdx}-${idx}`}
           className="selah-blur-word"
-          style={{ '--word-delay': `${currentWordIdx * staggerMs}ms` } as React.CSSProperties}
+          style={
+            {
+              '--word-delay': `${currentWordIdx * staggerMs}ms`,
+            } as React.CSSProperties
+          }
         >
           {part}
         </span>
@@ -100,11 +100,7 @@ function wrapWordsWithBlur(
 
   // Handle arrays of nodes (e.g. mapped scripture verses)
   if (Array.isArray(node)) {
-    return node.map((child, idx) => (
-      <React.Fragment key={idx}>
-        {wrapWordsWithBlur(child, counter, staggerMs)}
-      </React.Fragment>
-    ));
+    return node.map((child, idx) => <React.Fragment key={idx}>{wrapWordsWithBlur(child, counter, staggerMs)}</React.Fragment>);
   }
 
   // Handle React elements (e.g. <p>, <strong>, <sup>, <FormattedText>)
@@ -113,11 +109,7 @@ function wrapWordsWithBlur(
     const children = (node.props as any)?.children;
     if (!children) return node;
 
-    return React.cloneElement(
-      element,
-      element.props,
-      wrapWordsWithBlur(children, counter, staggerMs)
-    );
+    return React.cloneElement(element, element.props, wrapWordsWithBlur(children, counter, staggerMs));
   }
 
   return node;
@@ -130,12 +122,7 @@ interface TransitionTextProps {
   children: React.ReactNode;
 }
 
-export function TransitionText({
-  mode = 'fade',
-  animationKey,
-  className = '',
-  children,
-}: TransitionTextProps) {
+export function TransitionText({ mode = 'fade', animationKey, className = '', children }: TransitionTextProps) {
   const transitionClass = mode === 'cold' ? 'selah-transition-cold' : 'selah-transition-fade';
 
   return (
@@ -198,8 +185,28 @@ function CrossfadeImage({ source, alt, onError }: { source: string; alt: string;
 
   return (
     <>
-      {current && <img src={current} className="standalone-media-content standalone-image-layer" alt={alt} style={{ opacity: incomingVisible ? 0 : 1 }} onError={() => { if (currentRef.current === current) onError(); }} />}
-      {incoming && <img src={incoming} className="standalone-media-content standalone-image-layer" alt={alt} style={{ opacity: incomingVisible ? 1 : 0 }} onError={() => { if (incoming === source) onError(); }} />}
+      {current && (
+        <img
+          src={current}
+          className="standalone-media-content standalone-image-layer"
+          alt={alt}
+          style={{ opacity: incomingVisible ? 0 : 1 }}
+          onError={() => {
+            if (currentRef.current === current) onError();
+          }}
+        />
+      )}
+      {incoming && (
+        <img
+          src={incoming}
+          className="standalone-media-content standalone-image-layer"
+          alt={alt}
+          style={{ opacity: incomingVisible ? 1 : 0 }}
+          onError={() => {
+            if (incoming === source) onError();
+          }}
+        />
+      )}
     </>
   );
 }
@@ -235,6 +242,8 @@ export function SlideScreen({
   backgroundDim = 50,
   cameraFrame,
   cameraEnabled = false,
+  cameraMode = 'mix',
+  showMarkers = true,
   preview = false,
   mediaRevision = 0,
 }: {
@@ -245,6 +254,8 @@ export function SlideScreen({
   backgroundDim?: number;
   cameraFrame?: string;
   cameraEnabled?: boolean;
+  cameraMode?: 'feed' | 'text' | 'mix';
+  showMarkers?: boolean;
   preview?: boolean;
   mediaRevision?: number;
 }) {
@@ -255,7 +266,10 @@ export function SlideScreen({
 
   const [resolvedMedia, setResolvedMedia] = useState('');
   const [resolvedMediaType, setResolvedMediaType] = useState<Slide['mediaType']>();
-  const [transitionMedia, setTransitionMedia] = useState<{ url: string; type: Slide['mediaType'] } | null>(null);
+  const [transitionMedia, setTransitionMedia] = useState<{
+    url: string;
+    type: Slide['mediaType'];
+  } | null>(null);
   const [mediaError, setMediaError] = useState('');
   const previousMediaTypeRef = useRef(slide.mediaType);
   const resolvedMediaRef = useRef<{ url: string; type: Slide['mediaType'] } | undefined>(undefined);
@@ -268,7 +282,12 @@ export function SlideScreen({
   const textBoundaryRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLParagraphElement>(null);
   const audioMuted = preview || (slide.audioMuted ?? true);
-  const headerColors: Record<string, string> = { white: 'var(--screen-text)', teal: 'var(--primary)', gold: 'var(--gold)', rose: '#fb7185' };
+  const headerColors: Record<string, string> = {
+    white: 'var(--screen-text)',
+    teal: 'var(--primary)',
+    gold: 'var(--gold)',
+    rose: '#fb7185',
+  };
   const headerFonts: Record<string, string> = {
     'font-dm': 'inherit',
     'font-georgia': 'Georgia, serif',
@@ -284,11 +303,13 @@ export function SlideScreen({
       setResolvedBackground('');
       return;
     }
-    void getBackgroundObjectUrl(source!.slice('local-background:'.length)).then((url) => {
-      if (alive && url) {
-        setResolvedBackground(url);
-      }
-    }).catch(() => undefined);
+    void getBackgroundObjectUrl(source!.slice('local-background:'.length))
+      .then((url) => {
+        if (alive && url) {
+          setResolvedBackground(url);
+        }
+      })
+      .catch(() => undefined);
     return () => {
       alive = false;
     };
@@ -313,26 +334,28 @@ export function SlideScreen({
     if (slide.mediaType !== 'image' || previousMediaType !== 'image') setResolvedMedia('');
     setMediaError('');
     if (!previous || previous.type === slide.mediaType) setMediaError('Loading media…');
-    void getBackgroundObjectUrl(source!.slice('local-background:'.length)).then((url) => {
-      if (alive && url) {
-        setResolvedMedia(url);
-        setResolvedMediaType(slide.mediaType);
-        resolvedMediaRef.current = { url, type: slide.mediaType };
-        setMediaError('');
-        if (previous && previous.type !== slide.mediaType) {
-          transitionTimer.current = window.setTimeout(() => {
-            setTransitionMedia((current) => current?.url === previous.url ? null : current);
-            transitionTimer.current = undefined;
-          }, 320);
-        } else {
-          setTransitionMedia(null);
+    void getBackgroundObjectUrl(source!.slice('local-background:'.length))
+      .then((url) => {
+        if (alive && url) {
+          setResolvedMedia(url);
+          setResolvedMediaType(slide.mediaType);
+          resolvedMediaRef.current = { url, type: slide.mediaType };
+          setMediaError('');
+          if (previous && previous.type !== slide.mediaType) {
+            transitionTimer.current = window.setTimeout(() => {
+              setTransitionMedia((current) => (current?.url === previous.url ? null : current));
+              transitionTimer.current = undefined;
+            }, 320);
+          } else {
+            setTransitionMedia(null);
+          }
+        } else if (alive) {
+          setMediaError(`Missing schedule media “${slide.title}” (schedule item “${slide.title}”). Locate the original file in the Media pane to restore it.`);
         }
-      } else if (alive) {
-        setMediaError(`Missing schedule media “${slide.title}” (schedule item “${slide.title}”). Locate the original file in the Media pane to restore it.`);
-      }
-    }).catch(() => {
-      if (alive) setMediaError(`Missing schedule media “${slide.title}” (schedule item “${slide.title}”). Locate the original file in the Media pane to restore it.`);
-    });
+      })
+      .catch(() => {
+        if (alive) setMediaError(`Missing schedule media “${slide.title}” (schedule item “${slide.title}”). Locate the original file in the Media pane to restore it.`);
+      });
     return () => {
       alive = false;
       if (transitionTimer.current !== undefined) {
@@ -346,7 +369,14 @@ export function SlideScreen({
     if (slide.mediaType !== 'youtube' || !resolvedMedia) return;
     const frame = document.querySelector<HTMLIFrameElement>(`iframe[data-selah-youtube="${CSS.escape(slide.id)}"]`);
     if (!frame?.contentWindow) return;
-    frame.contentWindow.postMessage(JSON.stringify({ event: 'command', func: audioMuted ? 'mute' : 'unMute', args: [] }), '*');
+    frame.contentWindow.postMessage(
+      JSON.stringify({
+        event: 'command',
+        func: audioMuted ? 'mute' : 'unMute',
+        args: [],
+      }),
+      '*',
+    );
   }, [audioMuted, resolvedMedia, slide.id, slide.mediaType]);
 
   const background = resolvedBackground || slide.background || (slide.kind === 'scripture' ? '/backgrounds/stills/Red Particles.jpg' : undefined);
@@ -354,22 +384,19 @@ export function SlideScreen({
   const isBackgroundVideo = slide.backgroundType === 'video' || Boolean(background && /\.(mp4|webm|mov)(\?|$)/i.test(background));
   const isStandaloneMedia = slide.kind === 'media' && Boolean(slide.mediaUrl);
   const youtubeEmbed = slide.mediaType === 'youtube' && resolvedMedia ? youtubeUrlForEmbed(resolvedMedia) : '';
-  const priorMedia = transitionMedia ?? (
-    resolvedMedia && resolvedMediaType !== slide.mediaType
-      ? { url: resolvedMedia, type: resolvedMediaType }
-      : null
-  );
-  const renderPriorMedia = () => priorMedia?.type === 'video'
-    ? <video src={priorMedia.url} className="standalone-media-content standalone-media-previous" autoPlay loop playsInline muted preload="auto" />
-    : priorMedia?.type === 'image'
-      ? <img src={priorMedia.url} className="standalone-media-content standalone-media-previous" alt="" />
-      : null;
+  const priorMedia = transitionMedia ?? (resolvedMedia && resolvedMediaType !== slide.mediaType ? { url: resolvedMedia, type: resolvedMediaType } : null);
+  const renderPriorMedia = () =>
+    priorMedia?.type === 'video' ? (
+      <video src={priorMedia.url} className="standalone-media-content standalone-media-previous" autoPlay loop playsInline muted preload="auto" />
+    ) : priorMedia?.type === 'image' ? (
+      <img src={priorMedia.url} className="standalone-media-content standalone-media-previous" alt="" />
+    ) : null;
 
   const fittedFontSize = useFitText({
     boundaryRef: textBoundaryRef,
     contentRef: textRef,
     enabled: !isStandaloneMedia && mode === 'normal',
-    contentKey: `${slide.id}|${slide.kind}|${slide.heading ?? ''}|${slide.text}|${JSON.stringify(slide.formats ?? [])}|${JSON.stringify(slide.verses ?? [])}`,
+    contentKey: `${slide.id}|${slide.kind}|${slide.heading ?? ''}|${slide.text}|${showMarkers}|${JSON.stringify(slide.formats ?? [])}|${JSON.stringify(slide.verses ?? [])}`,
   });
 
   // A verse/chorus marker follows the actual wrapped text block. Short lyrics
@@ -408,9 +435,7 @@ export function SlideScreen({
     };
 
     positionMarker();
-    const observer = typeof ResizeObserver === 'undefined'
-      ? undefined
-      : new ResizeObserver(() => positionMarker(true));
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(() => positionMarker(true));
     observer?.observe(copy);
     observer?.observe(marker);
     observer?.observe(text);
@@ -423,19 +448,12 @@ export function SlideScreen({
       observer?.disconnect();
       window.removeEventListener('resize', onWindowResize);
     };
-  }, [
-    animationKey,
-    fittedFontSize,
-    slide.heading,
-    slide.headingStyle?.font,
-    slide.headingStyle?.size,
-    slide.headingStyle?.weight,
-    slide.text,
-    slide.verses,
-  ]);
+  }, [animationKey, fittedFontSize, slide.heading, slide.headingStyle?.font, slide.headingStyle?.size, slide.headingStyle?.weight, slide.text, slide.verses]);
 
   return (
-    <div className={`slide-screen ${slide.kind === 'scripture' ? 'scripture-screen' : ''} ${slide.kind === 'song' || slide.kind === 'sermon' ? 'song-screen' : ''} ${slide.chorus ? 'chorus-screen' : ''} ${mode === 'blackout' ? 'screen-blackout' : ''} ${isStandaloneMedia ? 'standalone-media-screen' : ''} ${className}`}>
+    <div
+      className={`slide-screen ${slide.kind === 'scripture' ? 'scripture-screen' : ''} ${slide.kind === 'song' || slide.kind === 'sermon' ? 'song-screen' : ''} ${slide.chorus ? 'chorus-screen' : ''} ${mode === 'blackout' ? 'screen-blackout' : ''} ${isStandaloneMedia ? 'standalone-media-screen' : ''} ${cameraEnabled && cameraMode === 'mix' ? 'emerald-camera-mix' : ''} ${cameraEnabled && cameraMode === 'feed' ? 'emerald-camera-feed-only' : ''} ${className}`}
+    >
       <style>{transitionStyles}</style>
       {mode !== 'blackout' && isStandaloneMedia && (
         <div className="standalone-media-stage">
@@ -450,36 +468,60 @@ export function SlideScreen({
                 allowFullScreen
                 referrerPolicy="strict-origin-when-cross-origin"
               />
-            ) : <div className="standalone-media-error">Loading YouTube video…</div>
+            ) : (
+              <div className="standalone-media-error">Loading YouTube video…</div>
+            )
           ) : slide.mediaType === 'video' ? (
-            resolvedMedia && resolvedMediaType === 'video'
-              ? <>
+            resolvedMedia && resolvedMediaType === 'video' ? (
+              <>
                 {renderPriorMedia()}
-                <video src={resolvedMedia} className={`standalone-media-content ${priorMedia ? 'standalone-media-incoming standalone-media-enter' : ''}`} autoPlay loop playsInline preload="auto" controls muted={audioMuted} onError={() => setMediaError(`This video could not be played: “${slide.title}”.`)} />
+                <video
+                  src={resolvedMedia}
+                  className={`standalone-media-content ${priorMedia ? 'standalone-media-incoming standalone-media-enter' : ''}`}
+                  autoPlay
+                  loop
+                  playsInline
+                  preload="auto"
+                  controls
+                  muted={audioMuted}
+                  onError={() => setMediaError(`This video could not be played: “${slide.title}”.`)}
+                />
               </>
-              : <>{renderPriorMedia()}<div className="standalone-media-error">{mediaError || `Loading “${slide.title}”…`}</div></>
+            ) : (
+              <>
+                {renderPriorMedia()}
+                <div className="standalone-media-error">{mediaError || `Loading “${slide.title}”…`}</div>
+              </>
+            )
+          ) : resolvedMedia && resolvedMediaType === 'image' ? (
+            <>
+              {renderPriorMedia()}
+              <div className={priorMedia ? 'standalone-media-incoming standalone-media-enter' : undefined}>
+                {mediaError ? <div className="standalone-media-error">{mediaError}</div> : <CrossfadeImage source={resolvedMedia} alt={slide.title || 'Presentation media'} onError={handleImageError} />}
+              </div>
+            </>
           ) : (
-            resolvedMedia && resolvedMediaType === 'image'
-              ? <>
-                {renderPriorMedia()}
-                <div className={priorMedia ? 'standalone-media-incoming standalone-media-enter' : undefined}>
-                  {mediaError
-                    ? <div className="standalone-media-error">{mediaError}</div>
-                    : <CrossfadeImage source={resolvedMedia} alt={slide.title || 'Presentation media'} onError={handleImageError} />}
-                </div>
-              </>
-              : <>{renderPriorMedia()}<div className="standalone-media-error">{mediaError || `Loading “${slide.title}”…`}</div></>
+            <>
+              {renderPriorMedia()}
+              <div className="standalone-media-error">{mediaError || `Loading “${slide.title}”…`}</div>
+            </>
           )}
         </div>
       )}
       {!isStandaloneMedia && mode !== 'blackout' && (
         <>
-          {cameraEnabled && cameraFrame && mode !== 'logo' ? (
-            <img src={cameraFrame} alt="" className="screen-background" />
+          {cameraEnabled && cameraMode !== 'text' && cameraFrame && mode !== 'logo' ? (
+            <img src={cameraFrame} alt="" className="screen-background emerald-camera-background" />
           ) : isBackgroundVideo && hasBackground ? (
             <video src={background} className="screen-background" autoPlay muted loop playsInline preload="auto" />
           ) : (
-            <img src={hasBackground && (background?.startsWith('blob:') || background?.startsWith('https:') || background?.startsWith('/')) ? background : mountain.url} alt="" width={1536} height={864} className={`screen-background ${slide.background?.startsWith('tone-') ? slide.background : ''}`} />
+            <img
+              src={hasBackground && (background?.startsWith('blob:') || background?.startsWith('https:') || background?.startsWith('/')) ? background : mountain.url}
+              alt=""
+              width={1536}
+              height={864}
+              className={`screen-background ${slide.background?.startsWith('tone-') ? slide.background : ''}`}
+            />
           )}
           <div className="screen-scrim" style={{ opacity: Math.max(0, Math.min(100, backgroundDim)) / 100 }} />
         </>
@@ -488,9 +530,9 @@ export function SlideScreen({
         <div className={`output-logo-wrapper ${__SELAH_EDITION__ === 'emerald' ? 'emerald-output-logo-wrapper' : ''}`}>
           <img className="output-logo" src={logo.url} alt="Selah Studio" />
         </div>
-      ) : mode === 'clear' || isStandaloneMedia ? null : (
-        <div ref={copyRef} key={`text-${animationKey}`} className={`screen-copy ${stageClass}`}>
-          {slide.heading && (
+      ) : mode === 'clear' || isStandaloneMedia || (cameraEnabled && cameraMode === 'feed') ? null : (
+        <div ref={copyRef} key={`text-${animationKey}-${cameraEnabled}-${cameraMode}`} className={`screen-copy ${stageClass}`}>
+          {slide.heading && showMarkers && (
             <strong
               ref={headingRef}
               className="song-slide-heading"
@@ -506,24 +548,24 @@ export function SlideScreen({
           )}
 
           <div ref={textBoundaryRef} className="slide-text-boundary">
-          <p
-            ref={textRef}
-            className={slide.kind === 'scripture' ? 'scripture-copy-text' : undefined}
-            style={{
-              fontSize: `${fittedFontSize}px`,
-            }}
-          >
-            {slide.verses ? (
-              slide.verses.map((verse, i) => (
-                <span className="scripture-verse" key={i}>
-                  <span className="scripture-verse-number">{verse.number}</span>
-                  <span className="scripture-copy-words">{verse.text}{' '}</span>
-                </span>
-              ))
-            ) : (
-              <FormattedText text={slide.text} formats={slide.formats} />
-            )}
-          </p>
+            <p
+              ref={textRef}
+              className={slide.kind === 'scripture' ? 'scripture-copy-text' : undefined}
+              style={{
+                fontSize: `${fittedFontSize}px`,
+              }}
+            >
+              {slide.verses ? (
+                slide.verses.map((verse, i) => (
+                  <span className="scripture-verse" key={i}>
+                    {showMarkers && <span className="scripture-verse-number">{verse.number}</span>}
+                    <span className="scripture-copy-words">{verse.text} </span>
+                  </span>
+                ))
+              ) : (
+                <FormattedText text={slide.text} formats={slide.formats} />
+              )}
+            </p>
           </div>
 
           {slide.kind === 'scripture' && <span className="passage-tag">{slide.title}</span>}
