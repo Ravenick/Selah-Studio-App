@@ -2746,6 +2746,7 @@ name = "selah-studio"
 version = "1.0.0"
 dependencies = [
  "axum",
+ "base64 0.22.1",
  "if-addrs",
  "rand",
  "serde",

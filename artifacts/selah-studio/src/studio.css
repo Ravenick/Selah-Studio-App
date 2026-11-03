@@ -2323,6 +2323,33 @@ h1 {
   width: min(100vw, 177.7778vh);
 }
 
+html[data-selah-edition="emerald"] .projector-view {
+  background: #000;
+}
+
+html[data-selah-edition="emerald"] .projector-view:has(.emerald-output-logo-wrapper) {
+  background:
+    radial-gradient(ellipse at 50% 50%, rgb(12 76 48 / .34), transparent 49%),
+    #000;
+}
+
+.emerald-output-logo-wrapper {
+  padding: 0;
+  overflow: visible;
+  animation: none;
+}
+
+.emerald-output-logo-wrapper::after {
+  display: none;
+}
+
+.emerald-output-logo-wrapper .output-logo {
+  width: min(58vh, 58vw);
+  height: auto;
+  aspect-ratio: 1;
+  filter: drop-shadow(0 0 42px rgb(26 184 112 / .3));
+}
+
 .fullscreen-button {
   position: fixed;
   bottom: 20px;

@@ -15,6 +15,7 @@ import {
   ArrowRight,
   BookOpen,
   Check,
+  Camera,
   CheckCheck,
   ChevronLeft,
   ChevronRight,
@@ -101,7 +102,9 @@ import { StudioConnect, type IncomingSubmission } from './studio-connect';
 
 import { invoke, isTauri } from '@tauri-apps/api/core';
 
-const logo = { url: '/selah-logo.png' };
+const logo = {
+  url: __SELAH_EDITION__ === 'emerald' ? '/selah-emerald-logo.png' : '/selah-logo.png',
+};
 const DEFAULT_BIBLE_ID = import.meta.env.VITE_SCRIPTURE_BIBLE_ID || 'de4e12af7f28f599-01';
 
 function postChannelMessage(channel: BroadcastChannel | null, message: unknown) {
@@ -915,6 +918,7 @@ export function Studio() {
   const [lyrics, setLyrics] = useState('');
   const [settings, setSettings] = useState(false);
   const [guide, setGuide] = useState(false);
+  const [cameraFrame, setCameraFrame] = useState<string>();
   const [guideStep, setGuideStep] = useState(0);
   const [timeline, setTimeline] = useState(initialTimeline);
   const [book, setBook] = useState('Psalms');
@@ -922,6 +926,25 @@ export function Studio() {
   const [verse, setVerse] = useState('1');
   const [notice, setNotice] = useState('');
   const [outputName, setOutputName] = useState('Main sanctuary');
+
+  useEffect(() => {
+    if (!isTauri() || __SELAH_EDITION__ !== 'emerald') return;
+    let active = true;
+    const refreshCameraFrame = async () => {
+      try {
+        const frame = await invoke<string | null>('get_latest_camera_frame');
+        if (active) setCameraFrame(frame ?? undefined);
+      } catch (error) {
+        console.error('Could not read the phone camera feed.', error);
+      }
+    };
+    void refreshCameraFrame();
+    const timer = window.setInterval(() => { void refreshCameraFrame(); }, 120);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
   const channel = useRef<BroadcastChannel | null>(null);
   const outputRef = useRef(output);
   const chapterInput = useRef<HTMLInputElement>(null);
@@ -2256,6 +2279,16 @@ export function Studio() {
           </div>
           <div className="panic-controls">
             <span>PANIC CONTROLS:</span>
+            {__SELAH_EDITION__ === 'emerald' && (
+              <Action
+                tip="Show or hide the connected phone camera behind the current text"
+                variant="ghost"
+                className={output.cameraEnabled ? 'panic-active' : ''}
+                onClick={() => setOutput((current) => ({ ...current, cameraEnabled: !current.cameraEnabled }))}
+              >
+                <Camera size={14} /> Phone Camera
+              </Action>
+            )}
             <Action
               tip="Cut projector to Black (F1)"
               variant="ghost"
@@ -3120,7 +3153,7 @@ export function Studio() {
                 </div>
 
                 <div className="monitor-screen-wrap flex-1 flex items-center justify-center bg-black/60 rounded-md overflow-hidden p-1">
-                  <SlideScreen slide={output.slide} mode={output.mode} transitionMode={output.transitionMode ?? transitionMode} backgroundDim={output.backgroundDim ?? backgroundDim} mediaRevision={output.slide.mediaRevision ?? 0} />
+                  <SlideScreen slide={output.slide} mode={output.mode} transitionMode={output.transitionMode ?? transitionMode} backgroundDim={output.backgroundDim ?? backgroundDim} cameraFrame={cameraFrame} cameraEnabled={output.cameraEnabled} mediaRevision={output.slide.mediaRevision ?? 0} />
                 </div>
 
                 <div className="monitor-footer py-1 px-1 flex items-center justify-between mt-2">
@@ -3433,7 +3466,27 @@ export function Studio() {
 
 export function Projector() {
   const [output, setOutput] = useState<OutputState>(createStartupOutput);
+  const [cameraFrame, setCameraFrame] = useState<string>();
   const accentTheme = output.accentTheme && output.accentTheme in projectorAccentColors ? output.accentTheme : 'teal';
+
+  useEffect(() => {
+    if (!isTauri() || __SELAH_EDITION__ !== 'emerald') return;
+    let active = true;
+    const refreshCameraFrame = async () => {
+      try {
+        const frame = await invoke<string | null>('get_latest_camera_frame');
+        if (active) setCameraFrame(frame ?? undefined);
+      } catch (error) {
+        console.error('Could not refresh the projector camera feed.', error);
+      }
+    };
+    void refreshCameraFrame();
+    const timer = window.setInterval(() => { void refreshCameraFrame(); }, 120);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     const bc = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('selah_projector_channel');
@@ -3455,7 +3508,7 @@ export function Projector() {
 
   return (
     <div className="projector-view" style={{ '--primary': projectorAccentColors[accentTheme] } as CSSProperties}>
-      <SlideScreen slide={output.slide} mode={output.mode} transitionMode={output.transitionMode ?? "blur-words"} backgroundDim={output.backgroundDim ?? 50} mediaRevision={output.slide.mediaRevision ?? 0} />
+      <SlideScreen slide={output.slide} mode={output.mode} transitionMode={output.transitionMode ?? "blur-words"} backgroundDim={output.backgroundDim ?? 50} cameraFrame={cameraFrame} cameraEnabled={output.cameraEnabled} mediaRevision={output.slide.mediaRevision ?? 0} />
       <Button
         variant="ghost"
         size="icon"

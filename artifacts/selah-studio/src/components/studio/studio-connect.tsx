@@ -359,6 +359,11 @@ export function StudioConnect({ onApprove }: Props) {
                       <a href="https://selahstudio.vercel.app" target="_blank" rel="noreferrer">selahstudio.vercel.app</a>{' '}
                       and tap “Scan Studio Connect”. The website scanner needs data to load; the submission itself stays on your local Wi-Fi.
                     </p>
+                    {__SELAH_EDITION__ === 'emerald' && (
+                      <p className="connect-scanner-hint">
+                        Android camera beta: install the Selah Camera APK from the latest GitHub Actions run, then paste this local connection address into the app to send a 720p camera feed over Wi-Fi.
+                      </p>
+                    )}
                     <div className="connect-firewall-note"><ShieldCheck size={14} /> If a device cannot connect, allow Selah Studio on <b>Private networks</b> in Windows Firewall.</div>
                     <Button className="connect-refresh" variant="outline" size="sm" disabled={busy} onClick={() => void refreshAddress()}><RefreshCw size={13} className={busy ? 'animate-spin' : ''} />Refresh address &amp; QR</Button>
                   </div>

@@ -9,7 +9,9 @@ import { FormattedText } from './formatted-text';
 export { createStartupOutput, welcomeSlide, type OutputState } from '@/lib/projector-state';
 
 const mountain = { url: '/selah-atmosphere.svg' };
-const logo = { url: '/selah-logo.png' };
+const logo = {
+  url: __SELAH_EDITION__ === 'emerald' ? '/selah-emerald-logo.png' : '/selah-logo.png',
+};
 
 function isLocalAsset(value?: string) {
   return Boolean(value?.startsWith('local-background:'));
@@ -231,6 +233,8 @@ export function SlideScreen({
   transitionMode = 'fade',
   className = '',
   backgroundDim = 50,
+  cameraFrame,
+  cameraEnabled = false,
   preview = false,
   mediaRevision = 0,
 }: {
@@ -239,6 +243,8 @@ export function SlideScreen({
   transitionMode?: 'cold' | 'fade' | string;
   className?: string;
   backgroundDim?: number;
+  cameraFrame?: string;
+  cameraEnabled?: boolean;
   preview?: boolean;
   mediaRevision?: number;
 }) {
@@ -468,7 +474,9 @@ export function SlideScreen({
       )}
       {!isStandaloneMedia && mode !== 'blackout' && (
         <>
-          {isBackgroundVideo && hasBackground ? (
+          {cameraEnabled && cameraFrame && mode !== 'logo' ? (
+            <img src={cameraFrame} alt="" className="screen-background" />
+          ) : isBackgroundVideo && hasBackground ? (
             <video src={background} className="screen-background" autoPlay muted loop playsInline preload="auto" />
           ) : (
             <img src={hasBackground && (background?.startsWith('blob:') || background?.startsWith('https:') || background?.startsWith('/')) ? background : mountain.url} alt="" width={1536} height={864} className={`screen-background ${slide.background?.startsWith('tone-') ? slide.background : ''}`} />
@@ -477,7 +485,7 @@ export function SlideScreen({
         </>
       )}
       {mode === 'logo' ? (
-        <div className="output-logo-wrapper">
+        <div className={`output-logo-wrapper ${__SELAH_EDITION__ === 'emerald' ? 'emerald-output-logo-wrapper' : ''}`}>
           <img className="output-logo" src={logo.url} alt="Selah Studio" />
         </div>
       ) : mode === 'clear' || isStandaloneMedia ? null : (

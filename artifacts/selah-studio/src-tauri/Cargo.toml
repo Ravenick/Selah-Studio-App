@@ -17,6 +17,7 @@ tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 axum = "0.7"
+base64 = "0.22"
 if-addrs = "0.13"
 rand = "0.8"
 serde = { version = "1", features = ["derive"] }

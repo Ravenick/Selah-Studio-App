@@ -51,3 +51,9 @@ Thumbs.db
 .cache/
 .local/
 /artifacts/selah-studio/src-tauri/target/
+/artifacts/selah-studio/src-tauri/icons-emerald/
+
+# Android builds
+**/.gradle/
+**/build/
+apps/selah-camera-android/local.properties

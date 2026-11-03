@@ -1,11 +1,12 @@
 use axum::{
-    body::Body,
+    body::{Body, Bytes},
     extract::{Query, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use if_addrs::IfAddr;
 use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
@@ -28,6 +29,8 @@ const MAX_INBOX_SUBMISSIONS: usize = 500;
 const MAX_TITLE_LENGTH: usize = 120;
 const MAX_CONTENT_LENGTH: usize = 20_000;
 const MAX_NOTES_LENGTH: usize = 2_000;
+const MAX_CAMERA_FRAME_BYTES: usize = 512 * 1024;
+const CAMERA_FRAME_MAX_AGE_SECONDS: u64 = 3;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -115,6 +118,7 @@ struct ConnectData {
     recent_submissions: HashMap<String, Vec<u64>>,
     active_transfers: usize,
     failed_submissions: usize,
+    camera_frame: Option<(Vec<u8>, u64)>,
 }
 
 type SharedState = Arc<Mutex<ConnectData>>;
@@ -143,8 +147,14 @@ fn status_for(data: &mut ConnectData) -> WifiStatus {
         stop_session(data);
     }
 
-    data.devices
-        .retain(|_, last_seen| now.saturating_sub(*last_seen) <= DEVICE_ACTIVE_SECONDS);
+    data.devices.retain(|device_id, last_seen| {
+        let active_window = if device_id == "phone-camera" {
+            CAMERA_FRAME_MAX_AGE_SECONDS
+        } else {
+            DEVICE_ACTIVE_SECONDS
+        };
+        now.saturating_sub(*last_seen) <= active_window
+    });
     let running = data.session.is_some();
     WifiStatus {
         running,
@@ -170,6 +180,7 @@ fn stop_session(data: &mut ConnectData) {
         }
     }
     data.devices.clear();
+    data.camera_frame = None;
 }
 
 fn is_private_ipv4(address: Ipv4Addr) -> bool {
@@ -204,12 +215,14 @@ fn load_submissions(path: &PathBuf) -> Result<Vec<IncomingSubmission>, String> {
         Err(error) => return Err(format!("Could not read the local inbox: {error}")),
     };
     if let Some(contents) = primary_contents {
-        return serde_json::from_slice(&contents)
-            .map_err(|error| format!("The local inbox file is damaged and could not be loaded: {error}"));
+        return serde_json::from_slice(&contents).map_err(|error| {
+            format!("The local inbox file is damaged and could not be loaded: {error}")
+        });
     }
     match fs::read(backup_path) {
-        Ok(contents) => serde_json::from_slice(&contents)
-            .map_err(|error| format!("The local inbox backup is damaged and could not be loaded: {error}")),
+        Ok(contents) => serde_json::from_slice(&contents).map_err(|error| {
+            format!("The local inbox backup is damaged and could not be loaded: {error}")
+        }),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
         Err(error) => Err(format!("Could not read the local inbox backup: {error}")),
     }
@@ -295,7 +308,11 @@ fn authorization_error() -> Response {
 }
 
 fn message_response(status: StatusCode, message: impl Into<String>) -> Response {
-    (status, Json(serde_json::json!({ "message": message.into() }))).into_response()
+    (
+        status,
+        Json(serde_json::json!({ "message": message.into() })),
+    )
+        .into_response()
 }
 
 async fn page(Query(query): Query<PairingQuery>, State(state): State<ServerState>) -> Response {
@@ -317,10 +334,9 @@ async fn page(Query(query): Query<PairingQuery>, State(state): State<ServerState
         header::CONTENT_TYPE,
         HeaderValue::from_static("text/html; charset=utf-8"),
     );
-    response.headers_mut().insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static("no-store"),
-    );
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response.headers_mut().insert(
         header::REFERRER_POLICY,
         HeaderValue::from_static("no-referrer"),
@@ -344,7 +360,10 @@ async fn presence(
         return message_response(StatusCode::BAD_REQUEST, "Invalid device identifier.");
     }
     let Ok(mut data) = state.shared.lock() else {
-        return message_response(StatusCode::INTERNAL_SERVER_ERROR, "The local sharing service is unavailable.");
+        return message_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "The local sharing service is unavailable.",
+        );
     };
     if !active_session(&data, token) {
         return authorization_error();
@@ -372,14 +391,21 @@ async fn submit(
         return authorization_error();
     };
     let Ok(mut data) = state.shared.lock() else {
-        return message_response(StatusCode::INTERNAL_SERVER_ERROR, "The local sharing service is unavailable.");
+        return message_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "The local sharing service is unavailable.",
+        );
     };
     if !active_session(&data, token) {
         return authorization_error();
     }
+
     if !valid_identifier(&request.id) || !valid_identifier(&request.device_id) {
         data.failed_submissions += 1;
-        return message_response(StatusCode::BAD_REQUEST, "Invalid submission or device identifier.");
+        return message_response(
+            StatusCode::BAD_REQUEST,
+            "Invalid submission or device identifier.",
+        );
     }
     if !valid_text(&request.title, MAX_TITLE_LENGTH, false)
         || !valid_text(&request.content, MAX_CONTENT_LENGTH, false)
@@ -469,6 +495,59 @@ async fn submit(
         }
     }
     (StatusCode::CREATED, Json(submission)).into_response()
+}
+
+async fn receive_camera_frame(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let Some(token) = pairing_token(&headers) else {
+        return authorization_error();
+    };
+    if body.is_empty() {
+        return message_response(StatusCode::BAD_REQUEST, "The camera frame is empty.");
+    }
+    if body.len() > MAX_CAMERA_FRAME_BYTES {
+        return message_response(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "The camera frame exceeds the 512 KB limit.",
+        );
+    }
+    if headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        != Some("image/jpeg")
+    {
+        return message_response(
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "Camera frames must be JPEG images.",
+        );
+    }
+    let Ok(mut data) = state.shared.lock() else {
+        return message_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "The local sharing service is unavailable.",
+        );
+    };
+    if !active_session(&data, token) {
+        return authorization_error();
+    }
+    let now = now_seconds();
+    data.camera_frame = Some((body.to_vec(), now));
+    data.devices.insert("phone-camera".to_string(), now);
+    StatusCode::NO_CONTENT.into_response()
+}
+
+#[tauri::command]
+fn get_latest_camera_frame(state: TauriState<'_, SharedState>) -> Result<Option<String>, String> {
+    let data = state
+        .lock()
+        .map_err(|_| "The local camera feed is unavailable.".to_string())?;
+    Ok(data.camera_frame.as_ref().and_then(|(frame, received_at)| {
+        (now_seconds().saturating_sub(*received_at) <= CAMERA_FRAME_MAX_AGE_SECONDS)
+            .then(|| format!("data:image/jpeg;base64,{}", BASE64.encode(frame)))
+    }))
 }
 
 const SUBMISSION_PAGE: &str = r##"<!doctype html>
@@ -565,7 +644,8 @@ fn submission_router(state: ServerState) -> Router {
         .route("/connect", get(page))
         .route("/api/presence", post(presence))
         .route("/api/submissions", post(submit))
-        .layer(axum::extract::DefaultBodyLimit::max(32 * 1024))
+        .route("/api/camera/frame", post(receive_camera_frame))
+        .layer(axum::extract::DefaultBodyLimit::max(MAX_CAMERA_FRAME_BYTES))
         .with_state(state)
 }
 
@@ -651,7 +731,10 @@ fn validate_studio_submission(submission: &IncomingSubmission) -> Result<(), Str
         || !valid_text(&submission.scripture_references, 500, true)
         || !valid_text(&submission.notes, MAX_NOTES_LENGTH, true)
         || !valid_text(&submission.sender_name, 80, true)
-        || !matches!(submission.status.as_str(), "pending" | "approved" | "rejected")
+        || !matches!(
+            submission.status.as_str(),
+            "pending" | "approved" | "rejected"
+        )
     {
         return Err("This submission contains invalid or oversized fields.".into());
     }
@@ -677,13 +760,16 @@ pub fn run() {
             prepare_schedules_directory,
             start_wifi_sharing,
             get_wifi_status,
+            get_latest_camera_frame,
             stop_wifi_sharing,
             get_incoming_submissions,
             update_incoming_submission,
             delete_incoming_submission
         ])
         .on_window_event(|window, event| {
-            if window.label() == "main" && matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+            if window.label() == "main"
+                && matches!(event, tauri::WindowEvent::CloseRequested { .. })
+            {
                 if let Some(state) = window.try_state::<SharedState>() {
                     if let Ok(mut data) = state.lock() {
                         stop_session(&mut data);
@@ -719,7 +805,10 @@ fn safe_schedule_name(name: &str) -> String {
         .trim()
         .chars()
         .map(|character| {
-            if matches!(character, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*') {
+            if matches!(
+                character,
+                '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*'
+            ) {
                 '-'
             } else {
                 character
@@ -733,7 +822,11 @@ fn safe_schedule_name(name: &str) -> String {
 fn save_schedule(name: String, contents: String, app: tauri::AppHandle) -> Result<String, String> {
     let directory = schedule_directory(&app)?;
     let sanitized = safe_schedule_name(&name);
-    let file_name = if sanitized.is_empty() { "Service Schedule" } else { &sanitized };
+    let file_name = if sanitized.is_empty() {
+        "Service Schedule"
+    } else {
+        &sanitized
+    };
     let destination = directory.join(format!("{file_name}.selah"));
     fs::write(&destination, contents)
         .map_err(|error| format!("Could not write the schedule file: {error}"))?;
@@ -742,7 +835,11 @@ fn save_schedule(name: String, contents: String, app: tauri::AppHandle) -> Resul
 }
 
 #[tauri::command]
-fn create_schedule(name: String, contents: String, app: tauri::AppHandle) -> Result<String, String> {
+fn create_schedule(
+    name: String,
+    contents: String,
+    app: tauri::AppHandle,
+) -> Result<String, String> {
     let directory = schedule_directory(&app)?;
     let sanitized = safe_schedule_name(&name);
     if sanitized.is_empty() {
@@ -778,7 +875,11 @@ mod tests {
     fn incoming_text_has_length_and_control_character_limits() {
         assert!(valid_text("A title\nwith lines", 30, false));
         assert!(!valid_text("", 30, false));
-        assert!(!valid_text("x".repeat(MAX_TITLE_LENGTH + 1).as_str(), MAX_TITLE_LENGTH, false));
+        assert!(!valid_text(
+            "x".repeat(MAX_TITLE_LENGTH + 1).as_str(),
+            MAX_TITLE_LENGTH,
+            false
+        ));
         assert!(!valid_text("text\u{0000}", 30, false));
     }
 

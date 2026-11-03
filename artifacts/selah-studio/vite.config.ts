@@ -21,7 +21,8 @@ const basePath = process.env.BASE_PATH ?? '/';
 export default defineConfig(async ({ mode }) => ({
   base: basePath,
   define: {
-    __SELAH_TAURI_BUILD__: JSON.stringify(mode === 'tauri'),
+    __SELAH_TAURI_BUILD__: JSON.stringify(mode.includes('tauri')),
+    __SELAH_EDITION__: JSON.stringify(mode.startsWith('emerald') ? 'emerald' : 'lightweight'),
   },
   envDir: path.resolve(import.meta.dirname, '..', '..'),
   // Only expose client configuration. Never bundle provider credentials.

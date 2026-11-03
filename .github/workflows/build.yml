@@ -45,8 +45,11 @@ jobs:
       - name: Run focused application tests
         run: pnpm test
 
-      - name: Build Windows installers
+      - name: Build Lightweight Windows installers
         run: pnpm --filter @workspace/selah-studio run build:desktop
+
+      - name: Build Emerald Windows installers
+        run: pnpm --filter @workspace/selah-studio run build:desktop:emerald
 
       - name: Sign Windows installers when certificate secrets are configured
         if: ${{ env.WINDOWS_CERTIFICATE_B64 != '' && env.WINDOWS_CERTIFICATE_PASSWORD != '' }}

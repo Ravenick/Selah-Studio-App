@@ -30,6 +30,12 @@ The desktop app can start a temporary Wi-Fi submission service from **Studio Con
 
 Received songs, sermons, and announcements are stored as JSON in Selah Studio's local application-data directory, independent of the sharing session. The Incoming panel supports preview, edit, approve, reject, and delete. Approval writes songs and sermons into the existing local library; announcements are tagged in the sermon library. These actions do not change live projector output. The browser/web build does not host Wi-Fi sharing; this feature is available in the Tauri desktop app.
 
+### Selah Camera (Emerald preview)
+
+The separate Android app in `apps/selah-camera-android` sends a single back-camera feed to Emerald over the same local Wi-Fi network. The first prototype requests a 1280x720 stream and sends JPEG frames at up to 15 fps; the real rate depends on the phone and network. No internet connection is used. Start Studio Connect in Emerald, paste its full local address into Selah Camera, and use **Phone Camera** in the operator controls to show or hide the feed behind the current text.
+
+GitHub Actions builds the Lightweight and Emerald Windows installers on pushes to `main` or `master`. A separate Android workflow builds a debug APK; download it from the workflow run's **Artifacts** section as `selah-camera-android-apk`. Debug APKs are for sideload testing and may need to be reinstalled when a later CI run uses a different debug signing key.
+
 ## Public hymn search
 
 The Songs library searches the bundled `artifacts/selah-studio/public/openhymnal.201406.xml` archive for title, author, or lyric text. Search works offline and only returns entries whose source record explicitly says `copyright: public domain`. Results include the author and full lyrics; Add & Load saves the song to Dexie and stages it in the deck.

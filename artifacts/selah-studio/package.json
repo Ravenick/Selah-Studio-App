@@ -10,8 +10,11 @@
     "build": "vite build --config vite.config.ts",
     "prebuild": "pnpm run tauri:icon",
     "build:tauri:web": "pnpm run tauri:icon && vite build --mode tauri --config vite.config.ts",
+    "build:tauri:web:emerald": "vite build --mode emerald-tauri --config vite.config.ts",
     "build:desktop": "tauri build",
+    "build:desktop:emerald": "tauri build --config src-tauri/tauri.emerald.conf.json",
     "tauri:icon": "tauri icon public/selah-logo.png --output src-tauri/icons",
+    "tauri:icon:emerald": "tauri icon public/selah-emerald-logo.png --output src-tauri/icons-emerald",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

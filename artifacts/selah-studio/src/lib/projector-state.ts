@@ -6,6 +6,7 @@ export type OutputState = {
   accentTheme?: 'teal' | 'gold' | 'purple';
   transitionMode?: 'cold' | 'fade' | 'blur-words';
   backgroundDim?: number;
+  cameraEnabled?: boolean;
 };
 
 export const welcomeSlide: Slide = {

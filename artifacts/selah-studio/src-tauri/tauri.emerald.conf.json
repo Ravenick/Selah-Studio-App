@@ -1,0 +1,25 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Selah Studio Emerald",
+  "identifier": "studio.selah.emerald",
+  "build": {
+    "beforeBuildCommand": "pnpm run tauri:icon:emerald && pnpm run build:tauri:web:emerald"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Selah Studio Emerald"
+      }
+    ]
+  },
+  "bundle": {
+    "icon": [
+      "icons-emerald/32x32.png",
+      "icons-emerald/128x128.png",
+      "icons-emerald/128x128@2x.png",
+      "icons-emerald/icon.icns",
+      "icons-emerald/icon.ico"
+    ]
+  }
+}
