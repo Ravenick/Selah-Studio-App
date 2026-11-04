@@ -280,6 +280,10 @@ textarea::placeholder {
   line-height: 1.1;
 }
 
+.brand-wordmark {
+  display: block;
+}
+
 .brand b {
   font-weight: 450;
   color: oklch(0.78 0.015 257);
@@ -8791,21 +8795,73 @@ html[data-selah-edition="emerald"] .studio .deck-panel {
     inset 0 1px rgb(255 255 255 / 0.025);
 }
 
+html[data-selah-edition="emerald"] .studio .dual-workstation {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  align-content: start;
+  grid-template-rows: minmax(390px, auto);
+  scrollbar-gutter: stable;
+}
+
+html[data-selah-edition="emerald"] .studio .monitor-card {
+  min-height: 390px;
+}
+
 .emerald-camera-mix .screen-copy {
-  inset: auto 6% 6%;
+  position: absolute;
+  inset: auto 0 0;
   display: flex;
-  min-height: 23%;
-  max-height: 40%;
+  width: 100%;
+  height: clamp(150px, 52%, 560px);
+  min-height: 0;
+  max-height: 66%;
+  margin: 0;
   flex-direction: column;
   justify-content: center;
-  padding: 2.5% 5%;
-  border: 1px solid rgb(151 235 174 / .22);
-  border-radius: clamp(12px, 1.8vw, 26px);
+  padding: 1.5% 5%;
+  border: 1px solid rgb(151 235 174 / 0.22);
+  border-radius: clamp(12px, 1.8vw, 26px) clamp(12px, 1.8vw, 26px) 0 0;
   background:
-    linear-gradient(110deg, rgb(3 12 7 / .86), rgb(4 9 6 / .78) 65%, rgb(10 40 22 / .76));
-  box-shadow: 0 16px 55px rgb(0 0 0 / .48), inset 0 1px rgb(255 255 255 / .08), 0 0 35px rgb(29 164 83 / .09);
+    linear-gradient(110deg, rgb(3 12 7 / 0.86), rgb(4 9 6 / 0.78) 65%, rgb(10 40 22 / 0.76));
+  box-shadow: 0 16px 55px rgb(0 0 0 / 0.48), inset 0 1px rgb(255 255 255 / 0.08), 0 0 35px rgb(29 164 83 / 0.09);
   backdrop-filter: blur(15px);
   -webkit-backdrop-filter: blur(15px);
+  animation: emerald-banner-arrive 0.9s ease both;
+}
+
+.emerald-camera-mix .screen-copy::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image:
+    radial-gradient(circle at 8% 24%, rgb(255 255 255 / .19) 0 1.3px, transparent 1.7px),
+    radial-gradient(circle at 18% 66%, rgb(119 255 174 / .18) 0 1.2px, transparent 1.8px),
+    radial-gradient(circle at 41% 30%, rgb(255 255 255 / .14) 0 1.1px, transparent 1.5px),
+    radial-gradient(circle at 58% 74%, rgb(88 210 135 / .13) 0 1.2px, transparent 1.5px),
+    radial-gradient(circle at 77% 38%, rgb(255 255 255 / .15) 0 1.4px, transparent 1.8px),
+    radial-gradient(circle at 91% 68%, rgb(152 255 196 / .12) 0 1.2px, transparent 1.6px);
+  opacity: 0.9;
+  pointer-events: none;
+  animation: emerald-dust-drift 18s ease-in-out infinite alternate;
+}
+
+@keyframes emerald-banner-arrive {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes emerald-dust-drift {
+  0% { transform: translate(-1%, 1%) scale(1); }
+  50% { transform: translate(1.5%, -1.2%) scale(1.03); }
+  100% { transform: translate(-1.2%, 1.4%) scale(1.01); }
 }
 
 .emerald-camera-background {
@@ -8826,15 +8882,79 @@ html[data-selah-edition="emerald"] .studio .deck-panel {
 }
 
 .emerald-camera-mix .slide-text-boundary {
-  top: 24%;
-  right: 4%;
-  bottom: 8%;
-  left: 4%;
+  position: relative;
+  inset: auto;
+  flex: 1 1 0;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  justify-content: center;
+  align-items: center;
 }
 
 .emerald-camera-mix.scripture-screen .slide-text-boundary {
-  top: 12%;
-  bottom: 8%;
+  top: auto;
+  bottom: auto;
+}
+
+.emerald-camera-mix.scripture-screen .passage-tag {
+  position: relative;
+  inset: auto;
+  flex: 0 0 auto;
+  width: 100%;
+  margin: 0;
+  padding-top: 0.35em;
+  font-size: clamp(9px, 1.1cqw, 15px);
+  line-height: 1.1;
+  text-align: center;
+}
+
+.emerald-camera-mix .song-slide-heading {
+  position: relative;
+  inset: auto;
+  flex: 0 0 auto;
+  max-width: 100%;
+  margin: 0 0 0.3em;
+  font-size: clamp(12px, 1.5cqw, 22px) !important;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.emerald-camera-mix .song-slide-heading,
+.emerald-camera-mix .scripture-verse-number,
+.emerald-camera-mix .passage-tag {
+  text-shadow:
+    0 2px 10px rgb(0 0 0 / 0.82),
+    0 0 22px rgb(96 246 151 / 0.18);
+}
+
+.emerald-camera-mix .song-slide-heading {
+  font-size: clamp(16px, 2.3cqw, 36px) !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.emerald-camera-mix .scripture-copy-text,
+.emerald-camera-mix .screen-copy p {
+  line-height: 1.12 !important;
+  letter-spacing: -0.04em;
+  font-weight: 900 !important;
+  text-wrap: balance;
+  text-shadow:
+    0 2px 8px rgb(0 0 0 / 0.8),
+    0 0 16px rgb(17 200 86 / 0.18),
+    0 0 1px rgb(255 255 255 / 0.2);
+  -webkit-text-stroke: 0.4px rgb(255 255 255 / 0.08);
+  transition: font-size 260ms ease-out;
+}
+
+.emerald-camera-mix .scripture-verse-number {
+  margin-right: 0.45em;
+  font-size: 0.72em;
+}
+
+.emerald-camera-mix .scripture-copy-words {
+  display: inline;
 }
 
 .emerald-mix-dock {

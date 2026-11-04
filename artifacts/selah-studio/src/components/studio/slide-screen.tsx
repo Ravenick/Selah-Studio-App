@@ -392,11 +392,15 @@ export function SlideScreen({
       <img src={priorMedia.url} className="standalone-media-content standalone-media-previous" alt="" />
     ) : null;
 
+  const scriptureBannerRatio = slide.kind === 'scripture' ? 0.04 : undefined;
   const fittedFontSize = useFitText({
     boundaryRef: textBoundaryRef,
     contentRef: textRef,
     enabled: !isStandaloneMedia && mode === 'normal',
     contentKey: `${slide.id}|${slide.kind}|${slide.heading ?? ''}|${slide.text}|${showMarkers}|${JSON.stringify(slide.formats ?? [])}|${JSON.stringify(slide.verses ?? [])}`,
+    minFont: slide.kind === 'scripture' ? 12 : 16,
+    maxFont: slide.kind === 'scripture' ? 58 : undefined,
+    maxFontRatio: cameraEnabled && cameraMode === 'mix' ? (scriptureBannerRatio ?? 0.05) : slide.kind === 'scripture' ? 0.04 : undefined,
   });
 
   // A verse/chorus marker follows the actual wrapped text block. Short lyrics

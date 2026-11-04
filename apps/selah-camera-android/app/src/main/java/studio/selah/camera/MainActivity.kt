@@ -12,6 +12,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import androidx.activity.ComponentActivity
@@ -181,10 +182,15 @@ class MainActivity : ComponentActivity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(0xff000000.toInt())
             addView(brand, LinearLayout.LayoutParams(-1, -2))
-            addView(previewView, LinearLayout.LayoutParams(-1, 0, 1f))
+            addView(previewView, LinearLayout.LayoutParams(-1, 0, 1f).apply { minHeight = 220 })
             addView(controls, LinearLayout.LayoutParams(-1, -2))
         }
-        setContentView(root)
+        val scrollContainer = ScrollView(this).apply {
+            isFillViewport = true
+            setBackgroundColor(0xff000000.toInt())
+            addView(root)
+        }
+        setContentView(scrollContainer)
     }
 
     private fun connectCamera() {

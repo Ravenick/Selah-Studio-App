@@ -1402,7 +1402,13 @@ export function Studio() {
     loadPreview(slide);
 
     if (goLive) {
-      broadcast(slide);
+      setOutput((current) => ({
+        ...current,
+        slide,
+        mode: 'normal',
+        transitionMode,
+        showMarkers: current.showMarkers ?? showMarkers,
+      }));
       setNotice(`Displayed ${title} (${selectedTranslation}) live`);
     }
   }
@@ -1926,11 +1932,13 @@ export function Studio() {
       if (firstSelectedSlide) {
         setStorePreview(firstSelectedSlide);
         if (takeLive) {
-          setOutput({
+          setOutput((current) => ({
+            ...current,
             slide: firstSelectedSlide,
             mode: 'normal',
             transitionMode,
-          });
+            showMarkers: current.showMarkers ?? showMarkers,
+          }));
           setStoreLive(firstSelectedSlide);
           setNotice(`Projected ${translationKey} selection live`);
         } else {
@@ -2237,9 +2245,9 @@ export function Studio() {
           <div className="flex items-center gap-3">
             <a href="/" className="brand">
               <img src={logo.url} width={38} height={38} alt="Selah mark" />
-              <span>
+              <span className="brand-wordmark">
                 Selah <b>Studio</b>
-                <small>SANCTUARY WORKSPACE</small>
+                <small>{__SELAH_EDITION__ === 'emerald' ? 'EMERALD VERSION' : 'SANCTUARY WORKSPACE'}</small>
               </span>
             </a>
           </div>

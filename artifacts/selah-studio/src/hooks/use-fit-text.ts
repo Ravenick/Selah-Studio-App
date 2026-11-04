@@ -7,6 +7,7 @@ type FitTextOptions = {
   enabled?: boolean;
   minFont?: number;
   maxFont?: number;
+  maxFontRatio?: number;
 };
 
 const EPSILON = 0;
@@ -23,6 +24,7 @@ export function useFitText({
   enabled = true,
   minFont = 12,
   maxFont,
+  maxFontRatio = 0.075,
 }: FitTextOptions) {
   const [fontSize, setFontSize] = useState(maxFont ?? 16.9);
 
@@ -46,6 +48,9 @@ export function useFitText({
       probeCopy.style.setProperty('transition', 'none', 'important');
       probeCopy.style.setProperty('visibility', 'hidden', 'important');
       probeCopy.style.setProperty('pointer-events', 'none', 'important');
+      probeCopy.style.setProperty('position', 'absolute', 'important');
+      probeCopy.style.setProperty('inset', '0', 'important');
+      probeCopy.style.setProperty('overflow', 'hidden', 'important');
       screen.appendChild(probeCopy);
 
       try {
@@ -57,19 +62,29 @@ export function useFitText({
         const height = probeBoundary.clientHeight;
         if (!width || !height) return;
 
-        const fits = (candidate: number) => {
-          probeText.style.setProperty('font-size', `${candidate}px`, 'important');
-          const boundaryRect = probeBoundary.getBoundingClientRect();
-          const textRect = probeText.getBoundingClientRect();
-          return probeText.scrollHeight <= Math.ceil(textRect.height)
-            && probeText.scrollWidth <= Math.ceil(textRect.width)
-            && textRect.top >= boundaryRect.top - EPSILON
-            && textRect.left >= boundaryRect.left - EPSILON
-            && textRect.bottom <= boundaryRect.bottom + EPSILON
-            && textRect.right <= boundaryRect.right + EPSILON;
+        const resetText = () => {
+          probeText.style.setProperty('font-size', '', 'important');
+          probeText.style.setProperty('max-width', '', 'important');
+          probeText.style.setProperty('width', '', 'important');
         };
 
-        const targetMax = maxFont ?? Math.min(120, width * 0.075);
+        const fits = (candidate: number) => {
+          probeText.style.setProperty('font-size', `${candidate}px`, 'important');
+          probeText.style.setProperty('max-width', '100%', 'important');
+          probeText.style.setProperty('width', '100%', 'important');
+
+          const boundaryRect = probeBoundary.getBoundingClientRect();
+          const textRect = probeText.getBoundingClientRect();
+          const withinBoundary =
+            textRect.top >= boundaryRect.top - EPSILON &&
+            textRect.left >= boundaryRect.left - EPSILON &&
+            textRect.bottom <= boundaryRect.bottom + EPSILON &&
+            textRect.right <= boundaryRect.right + EPSILON;
+          const noOverflow = probeText.scrollHeight <= Math.ceil(textRect.height + 1) && probeText.scrollWidth <= Math.ceil(textRect.width + 1);
+          return noOverflow && withinBoundary;
+        };
+
+        const targetMax = maxFont ?? Math.min(120, width * maxFontRatio);
         const search = (floor: number, ceiling: number) => {
           let low = floor;
           let high = ceiling;
@@ -86,8 +101,14 @@ export function useFitText({
           return best;
         };
 
-        let best = fits(minFont) ? search(minFont, Math.max(minFont, targetMax)) : search(1, minFont);
-        if (!best) best = 1;
+        const lowerBound = Math.max(1, minFont);
+        const upperBound = Math.max(lowerBound, targetMax);
+        const baselineFits = fits(lowerBound);
+        let best = baselineFits ? search(lowerBound, upperBound) : search(1, lowerBound);
+        if (!best) {
+          resetText();
+          best = 1;
+        }
         const next = Math.max(1, Math.floor(best * 10) / 10);
         setFontSize((current) => (Math.abs(current - next) < 0.1 ? current : next));
       } finally {
@@ -110,7 +131,7 @@ export function useFitText({
       cancelAnimationFrame(frame);
       observer?.disconnect();
     };
-  }, [boundaryRef, contentRef, contentKey, enabled, minFont, maxFont]);
+  }, [boundaryRef, contentRef, contentKey, enabled, minFont, maxFont, maxFontRatio]);
 
   return fontSize;
 }
