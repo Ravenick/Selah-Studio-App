@@ -6,6 +6,7 @@ type FitTextOptions = {
   contentKey: string;
   enabled?: boolean;
   minFont?: number;
+  minFontRatio?: number;
   maxFont?: number;
   maxFontRatio?: number;
 };
@@ -23,6 +24,7 @@ export function useFitText({
   contentKey,
   enabled = true,
   minFont = 12,
+  minFontRatio,
   maxFont,
   maxFontRatio = 0.075,
 }: FitTextOptions) {
@@ -62,13 +64,9 @@ export function useFitText({
         const height = probeBoundary.clientHeight;
         if (!width || !height) return;
 
-        const resetText = () => {
-          probeText.style.setProperty('font-size', '', 'important');
-          probeText.style.setProperty('max-width', '', 'important');
-          probeText.style.setProperty('width', '', 'important');
-        };
-
         const fits = (candidate: number) => {
+          probeText.style.setProperty('animation', 'none', 'important');
+          probeText.style.setProperty('transition', 'none', 'important');
           probeText.style.setProperty('font-size', `${candidate}px`, 'important');
           probeText.style.setProperty('max-width', '100%', 'important');
           probeText.style.setProperty('width', '100%', 'important');
@@ -101,14 +99,10 @@ export function useFitText({
           return best;
         };
 
-        const lowerBound = Math.max(1, minFont);
+        const lowerBound = minFontRatio === undefined ? Math.max(1, minFont) : Math.max(1, width * minFontRatio);
         const upperBound = Math.max(lowerBound, targetMax);
         const baselineFits = fits(lowerBound);
-        let best = baselineFits ? search(lowerBound, upperBound) : search(1, lowerBound);
-        if (!best) {
-          resetText();
-          best = 1;
-        }
+        const best = baselineFits ? search(lowerBound, upperBound) || lowerBound : lowerBound;
         const next = Math.max(1, Math.floor(best * 10) / 10);
         setFontSize((current) => (Math.abs(current - next) < 0.1 ? current : next));
       } finally {
@@ -131,7 +125,7 @@ export function useFitText({
       cancelAnimationFrame(frame);
       observer?.disconnect();
     };
-  }, [boundaryRef, contentRef, contentKey, enabled, minFont, maxFont, maxFontRatio]);
+  }, [boundaryRef, contentRef, contentKey, enabled, minFont, minFontRatio, maxFont, maxFontRatio]);
 
   return fontSize;
 }

@@ -8936,15 +8936,16 @@ html[data-selah-edition="emerald"] .studio .monitor-card {
 
 .emerald-camera-mix .scripture-copy-text,
 .emerald-camera-mix .screen-copy p {
-  line-height: 1.12 !important;
-  letter-spacing: -0.04em;
-  font-weight: 900 !important;
-  text-wrap: balance;
+  font-family: var(--font-sans), sans-serif;
+  font-size: 1.25cqw;
+  line-height: 1.2 !important;
+  letter-spacing: 0;
+  font-weight: 800 !important;
+  text-wrap: pretty;
   text-shadow:
-    0 2px 8px rgb(0 0 0 / 0.8),
-    0 0 16px rgb(17 200 86 / 0.18),
-    0 0 1px rgb(255 255 255 / 0.2);
-  -webkit-text-stroke: 0.4px rgb(255 255 255 / 0.08);
+    0 2px 4px rgb(0 0 0 / 0.96),
+    0 4px 12px rgb(0 0 0 / 0.9),
+    0 0 18px rgb(0 0 0 / 0.68);
   transition: font-size 260ms ease-out;
 }
 

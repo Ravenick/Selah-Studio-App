@@ -182,7 +182,8 @@ class MainActivity : ComponentActivity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(0xff000000.toInt())
             addView(brand, LinearLayout.LayoutParams(-1, -2))
-            addView(previewView, LinearLayout.LayoutParams(-1, 0, 1f).apply { minHeight = 220 })
+            previewView.setMinimumHeight(220)
+            addView(previewView, LinearLayout.LayoutParams(-1, 0, 1f))
             addView(controls, LinearLayout.LayoutParams(-1, -2))
         }
         val scrollContainer = ScrollView(this).apply {
