@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fs,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket},
     path::PathBuf,
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
@@ -192,11 +192,63 @@ fn is_private_ipv4(address: Ipv4Addr) -> bool {
 fn discover_private_ipv4() -> Result<Ipv4Addr, String> {
     let interfaces = if_addrs::get_if_addrs()
         .map_err(|error| format!("Could not inspect network interfaces: {error}"))?;
-    interfaces
+    let candidates: Vec<_> = interfaces
         .into_iter()
-        .find_map(|interface| match interface.addr {
-            IfAddr::V4(address) if is_private_ipv4(address.ip) => Some(address.ip),
+        .filter_map(|interface| match interface.addr {
+            IfAddr::V4(address) if is_private_ipv4(address.ip) => {
+                Some((interface.name.to_lowercase(), address.ip))
+            }
             _ => None,
+        })
+        .collect();
+
+    let routed_address = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))
+        .and_then(|socket| {
+            socket.connect((Ipv4Addr::new(192, 0, 2, 1), 9))?;
+            Ok(socket)
+        })
+        .ok()
+        .and_then(|socket| socket.local_addr().ok())
+        .and_then(|address| match address.ip() {
+            IpAddr::V4(ip) if is_private_ipv4(ip) => Some(ip),
+            _ => None,
+        });
+
+    let usable_candidates = candidates.iter().filter(|(name, _)| {
+        ![
+            "virtual",
+            "vethernet",
+            "vmware",
+            "vbox",
+            "hyper-v",
+            "vpn",
+            "wireguard",
+            "tailscale",
+            "openvpn",
+            "docker",
+            "wsl",
+            "bluetooth",
+            "loopback",
+            "teredo",
+            "isatap",
+        ]
+        .iter()
+        .any(|excluded| name.contains(*excluded))
+    });
+
+    routed_address
+        .filter(|address| usable_candidates.clone().any(|(_, candidate)| candidate == address))
+        .or_else(|| {
+            usable_candidates
+                .clone()
+                .find(|(name, _)| {
+                    ["wi-fi", "wifi", "wlan", "wireless", "ethernet"]
+                        .iter()
+                        .any(|preferred| name.contains(preferred))
+                })
+                .or_else(|| usable_candidates.clone().next())
+                .or_else(|| candidates.first())
+                .map(|(_, address)| *address)
         })
         .ok_or_else(|| {
             "No private Wi-Fi or LAN IPv4 address was found. Connect this computer and the sender device to the same Wi-Fi network or hotspot, then try again.".to_string()
@@ -1005,6 +1057,21 @@ mod tests {
             .await
             .expect("page request should return");
         assert_eq!(page_response.status(), StatusCode::OK);
+
+        let camera_response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/camera/frame")
+                    .header("x-pairing-token", token)
+                    .header(CONTENT_TYPE, "image/jpeg")
+                    .body(Body::from(vec![0xff, 0xd8, 0xff, 0xd9]))
+                    .expect("valid camera frame request"),
+            )
+            .await
+            .expect("camera frame request should return");
+        assert_eq!(camera_response.status(), StatusCode::NO_CONTENT);
 
         let payload = serde_json::json!({
             "id": "unit-test-submission-0001",

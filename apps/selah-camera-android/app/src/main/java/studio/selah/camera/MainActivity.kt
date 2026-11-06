@@ -1,6 +1,7 @@
 package studio.selah.camera
 
 import android.Manifest
+import android.app.Dialog
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Matrix
@@ -10,9 +11,9 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import androidx.activity.ComponentActivity
@@ -28,6 +29,8 @@ import androidx.core.content.ContextCompat
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -49,6 +52,11 @@ class MainActivity : ComponentActivity() {
     private lateinit var resolutionInput: Spinner
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var uploadExecutor: ExecutorService
+    private var scannerDialog: Dialog? = null
+    private var scannerPreviewView: PreviewView? = null
+    private var scannerStatusText: TextView? = null
+    @Volatile
+    private var connectionPending = false
     private val uploadInProgress = AtomicBoolean(false)
     private val lastFrameStartedAt = AtomicLong(0L)
     private val lastQrScanAt = AtomicLong(0L)
@@ -78,8 +86,13 @@ class MainActivity : ComponentActivity() {
             else if (granted) startCamera()
             else {
                 scanningForPairing = false
-                scanQrButton.text = "Scan QR offline"
-                showStatus("Camera permission is needed to scan or send a live feed.")
+                scannerDialog?.dismiss()
+                if (streamAddress != null) {
+                    streamAddress = null
+                    pairingToken = null
+                    connectButton.text = "Connect camera"
+                }
+                showStatus("Camera permission is needed to scan or send a live feed.", force = true)
             }
         }
 
@@ -156,91 +169,218 @@ class MainActivity : ComponentActivity() {
             setOnClickListener { connectCamera() }
         }
         scanQrButton = Button(this).apply {
-            text = "Scan QR offline"
+            text = "Scan to connect"
             backgroundTintList = android.content.res.ColorStateList.valueOf(0xff18231b.toInt())
             setTextColor(0xffc7f1d3.toInt())
-            setOnClickListener { toggleQrScanner() }
+            setOnClickListener { showQrScanner() }
         }
 
+        val previewPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(0xff050705.toInt())
+            addView(brand, LinearLayout.LayoutParams(-1, -2))
+            addView(previewView, LinearLayout.LayoutParams(-1, 0, 1f))
+        }
+        val resolutionLabel = TextView(this).apply {
+            text = "CAMERA QUALITY"
+            textSize = 10f
+            letterSpacing = .12f
+            setTextColor(0xff8ca997.toInt())
+        }
         val cameraOptions = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(resolutionLabel, LinearLayout.LayoutParams(-1, -2))
+            addView(resolutionInput, LinearLayout.LayoutParams(-1, 52))
+        }
+        val actionRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(resolutionInput, LinearLayout.LayoutParams(0, -2, 1f))
-            addView(scanQrButton, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = 8 })
+            addView(scanQrButton, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(connectButton, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = 8 })
         }
-
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(16, 10, 16, 14)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(20, 14, 20, 14)
             setBackgroundColor(0xff080b09.toInt())
+            addView(TextView(this@MainActivity).apply {
+                text = "CONNECT TO STUDIO"
+                textSize = 12f
+                letterSpacing = .12f
+                setTextColor(0xff75cf91.toInt())
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            }, LinearLayout.LayoutParams(-1, -2))
+            addView(TextView(this@MainActivity).apply {
+                text = "Scan the Studio Connect QR code or paste its full local address."
+                textSize = 12f
+                setTextColor(0xff9aafa2.toInt())
+                setPadding(0, 5, 0, 12)
+            }, LinearLayout.LayoutParams(-1, -2))
             addView(cameraOptions, LinearLayout.LayoutParams(-1, -2))
-            addView(addressInput, LinearLayout.LayoutParams(-1, -2))
-            addView(connectButton, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 5 })
-            addView(statusText, LinearLayout.LayoutParams(-1, 52).apply { topMargin = 3 })
+            addView(addressInput, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 10 })
+            addView(actionRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 10 })
+            addView(statusText, LinearLayout.LayoutParams(-1, 64).apply { topMargin = 8 })
         }
         val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+            orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(0xff000000.toInt())
-            addView(brand, LinearLayout.LayoutParams(-1, -2))
-            previewView.setMinimumHeight(220)
-            addView(previewView, LinearLayout.LayoutParams(-1, 0, 1f))
-            addView(controls, LinearLayout.LayoutParams(-1, -2))
+            addView(previewPanel, LinearLayout.LayoutParams(0, -1, 1.35f))
+            addView(controls, LinearLayout.LayoutParams(0, -1, 1f))
         }
-        val scrollContainer = ScrollView(this).apply {
-            isFillViewport = true
-            setBackgroundColor(0xff000000.toInt())
-            addView(root)
-        }
-        setContentView(scrollContainer)
+        setContentView(root)
     }
 
     private fun connectCamera() {
-        scanningForPairing = false
-        scanQrButton.text = "Scan QR offline"
         if (streamAddress != null) {
             cameraProvider?.unbindAll()
             streamAddress = null
             pairingToken = null
             connectButton.text = "Connect camera"
-            showStatus("Camera disconnected.")
+            showStatus("Camera disconnected.", force = true)
             return
         }
-        val address = try {
-            URL(addressInput.text.toString().trim())
-        } catch (_: Exception) {
-            showStatus("Paste the full local address shown in Selah Studio Connect.")
+        if (connectionPending) return
+        val pairingAddress = parsePairingAddress(addressInput.text.toString())
+        if (pairingAddress == null) {
+            showStatus("Paste the complete http://…/connect?token=… address shown in Selah Studio Connect.", force = true)
             return
         }
-        val token = address.searchParameter("token")
-        if (address.protocol != "http" || token.isNullOrBlank()) {
-            showStatus("Use the complete http:// address and pairing token from Selah Studio.")
-            return
-        }
-        streamAddress = URL(address.protocol, address.host, address.port, "/api/camera/frame")
-        pairingToken = token
-        connectButton.text = "Camera connected"
-        showStatus("Connecting securely to this local Wi-Fi session…")
-
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-            startCamera()
-        } else {
-            requestCameraPermission.launch(Manifest.permission.CAMERA)
+        connectionPending = true
+        connectButton.isEnabled = false
+        scanQrButton.isEnabled = false
+        connectButton.text = "Checking link…"
+        showStatus("Checking the address and pairing token with Selah Studio…", force = true)
+        uploadExecutor.execute {
+            val result: Result<Int> = try {
+                val connection = (pairingAddress.first.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 3_000
+                    readTimeout = 3_000
+                    instanceFollowRedirects = false
+                }
+                val response = try {
+                    connection.responseCode
+                } finally {
+                    connection.disconnect()
+                }
+                Result.success(response)
+            } catch (error: Exception) {
+                Result.failure(error)
+            }
+            runOnUiThread {
+                connectionPending = false
+                connectButton.isEnabled = true
+                scanQrButton.isEnabled = true
+                result.onSuccess { response ->
+                    if (response !in 200..299) {
+                        connectButton.text = "Connect camera"
+                        showStatus(
+                            when (response) {
+                                401, 403 -> "Pairing code expired or invalid. Refresh Studio Connect and scan or paste the new address."
+                                404 -> "That address is not a Studio Connect session. Copy its complete connection link again."
+                                else -> "Selah Studio returned HTTP $response while checking the link."
+                            },
+                            force = true,
+                        )
+                        return@onSuccess
+                    }
+                    streamAddress = pairingAddress.second
+                    pairingToken = pairingAddress.third
+                    connectButton.text = "Disconnect camera"
+                    showStatus("Link verified. Starting the phone camera…", force = true)
+                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                        startCamera()
+                    } else {
+                        requestCameraPermission.launch(Manifest.permission.CAMERA)
+                    }
+                }.onFailure { error ->
+                    connectButton.text = "Connect camera"
+                    showStatus(
+                        "Could not reach Selah Studio: ${error.message ?: "connection timed out"}. Confirm both devices are on the same Wi-Fi and sharing is active.",
+                        force = true,
+                    )
+                }
+            }
         }
     }
 
-    private fun toggleQrScanner() {
-        if (scanningForPairing) {
-            scanningForPairing = false
-            qrFound.set(false)
-            cameraProvider?.unbindAll()
-            scanQrButton.text = "Scan QR offline"
-            showStatus("QR scanning stopped.")
+    private fun parsePairingAddress(value: String): Triple<URL, URL, String>? {
+        val address = try {
+            URL(value.trim())
+        } catch (_: Exception) {
+            return null
+        }
+        if (!address.protocol.equals("http", ignoreCase = true) ||
+            address.host.isBlank() ||
+            address.path.trimEnd('/') != "/connect"
+        ) return null
+        val token = address.searchParameter("token")?.takeIf { it.matches(Regex("[A-Fa-f0-9]{48}")) } ?: return null
+        val endpoint = try {
+            URL(address.protocol, address.host, address.port, "/api/camera/frame")
+        } catch (_: Exception) {
+            return null
+        }
+        return Triple(address, endpoint, token)
+    }
+
+    private fun showQrScanner() {
+        if (streamAddress != null || connectionPending) {
+            showStatus("Disconnect the camera before scanning a new Studio Connect code.", force = true)
             return
         }
+        if (scannerDialog?.isShowing == true) return
         scanningForPairing = true
         qrFound.set(false)
-        scanQrButton.text = "Stop scanning"
-        showStatus("Point the camera at the Selah Studio Connect QR code.")
+        val scannerPreview = PreviewView(this).apply {
+            scaleType = PreviewView.ScaleType.FILL_CENTER
+        }
+        scannerPreviewView = scannerPreview
+        scannerStatusText = TextView(this).apply {
+            text = "Point the camera at the Selah Studio Connect QR code."
+            textSize = 14f
+            setTextColor(0xffeffaf3.toInt())
+            setPadding(16, 12, 16, 12)
+        }
+        val closeButton = Button(this).apply {
+            text = "Cancel scan"
+            setOnClickListener { scannerDialog?.dismiss() }
+        }
+        val scanOverlay = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(8, 4, 8, 4)
+            setBackgroundColor(0xdd080b09.toInt())
+            addView(scannerStatusText, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(closeButton, LinearLayout.LayoutParams(-2, -2))
+        }
+        val scannerRoot = FrameLayout(this).apply {
+            setBackgroundColor(0xff000000.toInt())
+            addView(scannerPreview, FrameLayout.LayoutParams(-1, -1))
+            addView(
+                scanOverlay,
+                FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM),
+            )
+        }
+        val dialog = Dialog(this).apply {
+            setContentView(scannerRoot)
+            setOnDismissListener {
+                scanningForPairing = false
+                qrFound.set(false)
+                cameraProvider?.unbindAll()
+                scannerPreviewView = null
+                scannerStatusText = null
+                scannerDialog = null
+            }
+        }
+        scannerDialog = dialog
+        dialog.show()
+        dialog.window?.apply {
+            setBackgroundDrawableResource(android.R.color.transparent)
+            setLayout(
+                (resources.displayMetrics.widthPixels * 0.88f).toInt(),
+                (resources.displayMetrics.heightPixels * 0.86f).toInt(),
+            )
+        }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             startQrScanner()
         } else {
@@ -266,7 +406,10 @@ class MainActivity : ComponentActivity() {
                 val preview = Preview.Builder()
                     .setResolutionSelector(resolution)
                     .build()
-                    .also { it.surfaceProvider = previewView.surfaceProvider }
+                    .also { previewUseCase ->
+                        val scannerPreview = scannerPreviewView ?: return@addListener
+                        previewUseCase.surfaceProvider = scannerPreview.surfaceProvider
+                    }
                 val analysis = ImageAnalysis.Builder()
                     .setResolutionSelector(resolution)
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
@@ -291,8 +434,8 @@ class MainActivity : ComponentActivity() {
                 provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
             } catch (error: Exception) {
                 scanningForPairing = false
-                scanQrButton.text = "Scan QR offline"
-                showStatus("Could not start QR scanner: ${error.message ?: "unknown error"}")
+                scannerStatusText?.text = "Could not start scanner: ${error.message ?: "unknown error"}"
+                showStatus("Could not start QR scanner: ${error.message ?: "unknown error"}", force = true)
             }
         }, ContextCompat.getMainExecutor(this))
     }
@@ -323,22 +466,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleScannedAddress(value: String) {
-        val address = try {
-            URL(value)
-        } catch (_: Exception) {
-            null
-        }
-        if (address == null || address.protocol != "http" || address.searchParameter("token").isNullOrBlank()) {
+        if (parsePairingAddress(value) == null) {
             qrFound.set(false)
-            showStatus("That QR code is not a Selah Studio Connect address.")
+            scannerStatusText?.text = "Not a Studio Connect QR code. Keep scanning."
             return
         }
-        scanningForPairing = false
-        scanQrButton.text = "Scan QR offline"
-        cameraProvider?.unbindAll()
-        addressInput.setText(value)
-        showStatus("Pairing QR scanned. Connecting to Selah Studio…")
-        connectCamera()
+        addressInput.setText(value.trim())
+        scannerDialog?.dismiss()
+        showStatus("QR scanned. Tap Connect camera to verify the link and start the feed.", force = true)
     }
 
     private fun startCamera() {
@@ -448,12 +583,20 @@ class MainActivity : ComponentActivity() {
             val result = connection.responseCode
             connection.disconnect()
             if (result !in 200..299) {
-                showStatus("Studio rejected the camera feed (HTTP $result). Refresh the pairing address.")
+                val message = when (result) {
+                    401, 403 -> "Studio rejected the pairing token. Refresh Studio Connect and scan or paste the new address."
+                    404 -> "Studio does not recognize the camera endpoint. Update Selah Studio and reconnect."
+                    else -> "Studio rejected the camera feed (HTTP $result)."
+                }
+                showStatus(message, force = true)
             } else if (System.currentTimeMillis() - lastStatusAt > 2_000) {
                 showStatus("Live camera is connected to Selah Studio over local Wi-Fi.")
             }
         } catch (error: Exception) {
-            showStatus("Camera feed disconnected. Check Wi-Fi and the pairing address.")
+            showStatus(
+                "Camera feed lost: ${error.message ?: "connection timed out"}. Check Wi-Fi, firewall permission, and that Studio Connect is still active.",
+                force = true,
+            )
         } finally {
             uploadInProgress.set(false)
         }
@@ -462,17 +605,25 @@ class MainActivity : ComponentActivity() {
     private fun URL.searchParameter(name: String): String? =
         query?.split("&")?.firstNotNullOfOrNull { part ->
             val keyValue = part.split("=", limit = 2)
-            if (keyValue.firstOrNull() == name) keyValue.getOrNull(1) else null
+            if (keyValue.firstOrNull() == name) {
+                keyValue.getOrNull(1)?.let { URLDecoder.decode(it, StandardCharsets.UTF_8.name()) }
+            } else {
+                null
+            }
         }
 
-    private fun showStatus(message: String) {
+    private fun showStatus(message: String, force: Boolean = false) {
         val now = System.currentTimeMillis()
-        if (now - lastStatusAt < 1_000) return
+        if (!force && now - lastStatusAt < 1_000) return
         lastStatusAt = now
-        runOnUiThread { statusText.text = message }
+        runOnUiThread {
+            statusText.text = message
+            scannerStatusText?.text = message
+        }
     }
 
     override fun onDestroy() {
+        scannerDialog?.dismiss()
         cameraProvider?.unbindAll()
         cameraExecutor.shutdown()
         uploadExecutor.shutdown()

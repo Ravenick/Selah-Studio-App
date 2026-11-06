@@ -50,9 +50,6 @@ export function useFitText({
       probeCopy.style.setProperty('transition', 'none', 'important');
       probeCopy.style.setProperty('visibility', 'hidden', 'important');
       probeCopy.style.setProperty('pointer-events', 'none', 'important');
-      probeCopy.style.setProperty('position', 'absolute', 'important');
-      probeCopy.style.setProperty('inset', '0', 'important');
-      probeCopy.style.setProperty('overflow', 'hidden', 'important');
       screen.appendChild(probeCopy);
 
       try {
@@ -102,7 +99,7 @@ export function useFitText({
         const lowerBound = minFontRatio === undefined ? Math.max(1, minFont) : Math.max(1, width * minFontRatio);
         const upperBound = Math.max(lowerBound, targetMax);
         const baselineFits = fits(lowerBound);
-        const best = baselineFits ? search(lowerBound, upperBound) || lowerBound : lowerBound;
+        const best = baselineFits ? search(lowerBound, upperBound) || lowerBound : search(1, lowerBound) || 1;
         const next = Math.max(1, Math.floor(best * 10) / 10);
         setFontSize((current) => (Math.abs(current - next) < 0.1 ? current : next));
       } finally {
